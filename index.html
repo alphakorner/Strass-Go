@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,viewport-fit=cover"/>
+<meta name="theme-color" content="#080b12"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<title>STRASS'CITY — CTS Live</title>
+
+<!-- ⚙️  CONFIG — LIGNE A MODIFIER AVEC TON URL CLOUDFLARE WORKER -->
+<script>
+const PROXY = "https://COLLE-TON-URL-WORKER-ICI.workers.dev";
+// ex: "https://cts-proxy.bricejct.workers.dev"
+// Déploie cts-proxy-worker.js sur dash.cloudflare.com/workers puis colle l'URL ci-dessus.
+</script>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800;900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet"/>
+<style>
+/* ══════════════════════════════════════════
+   STRASS'CITY · single-file PWA
+   @ By Brice Jct · Alpha OS · Groupe Alpha Nex Strasbourg
+   Données : API CTS SIRI-lite (token via Cloudflare Worker)
+   ══════════════════════════════════════════ */
+:root{
+  --bg:#080b12; --bg2:#0c1020; --bg3:#111828;
+  --glass:rgba(15,22,40,0.66); --glass2:rgba(12,18,32,0.92);
+  --border:rgba(255,255,255,0.10); --border2:rgba(255,255,255,0.20);
+  --text:#eaf0fa; --muted:#8c9ab5; --dim:#4a5568;
+  --red:#E2001A; --cyan:#27d3ff; --green:#1fd99a; --amber:#ffb020; --pink:#ff3b7a;
+  --a-color:#E2001A; --a-glow:rgba(226,0,26,.45);
+  --navbar-h:68px;
+  --r:18px; --r-sm:12px;
+  --shadow:0 16px 48px rgba(0,0,0,.6);
+  --shadow-sm:0 4px 16px rgba(0,0,0,.4);
+  --f:'Inter',system-ui,sans-serif; --fd:'Sora',system-ui,sans-serif; --fm:'JetBrains Mono',monospace;
+  /* Trams officiel CTS — source : identité réseau */
+  --tramA:#E2001A; --tramB:#009FE3; --tramC:#F39200;
+  --tramD:#50AF31; --tramE:#A04199; --tramF:#E5007D;
+  --bus:#4a5e80;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-font-smoothing:antialiased}
+html,body{height:100%;overflow:hidden;margin:0;background:var(--bg)}
+body{font-family:var(--f);color:var(--text);position:fixed;inset:0}
+
+/* ══ VUES ══ */
+.view{position:absolute;inset:0 0 var(--navbar-h) 0;display:none;flex-direction:column;overflow:hidden}
+.view.active{display:flex}
+
+/* ══ NAVBAR ══ */
+.navbar{
+  position:absolute;left:0;right:0;bottom:0;height:var(--navbar-h);z-index:2000;
+  background:var(--glass2);backdrop-filter:blur(22px) saturate(1.5);
+  border-top:1px solid var(--border2);
+  display:flex;padding:0 4px;padding-bottom:env(safe-area-inset-bottom,0);
+}
+.nbtab{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:4px;padding:6px 4px;cursor:pointer;user-select:none;
+  transition:.18s;border-radius:14px;margin:4px 2px;position:relative;
+}
+.nbtab:active{background:rgba(255,255,255,.06)}
+.nbtab svg{width:22px;height:22px;stroke-width:2;transition:.2s;stroke:var(--muted);fill:none;stroke-linecap:round;stroke-linejoin:round}
+.nbtab span{font-size:10px;font-weight:600;color:var(--muted);letter-spacing:.2px;transition:.2s}
+.nbtab.active svg{stroke:var(--cyan);filter:drop-shadow(0 0 6px rgba(39,211,255,.7))}
+.nbtab.active span{color:var(--cyan)}
+.nbtab .badge{
+  position:absolute;top:5px;right:calc(50% - 14px);
+  min-width:16px;height:16px;border-radius:8px;
+  background:var(--red);color:#fff;font-size:9px;font-weight:700;font-family:var(--fm);
+  display:none;align-items:center;justify-content:center;padding:0 4px;
+  box-shadow:0 0 8px var(--a-glow);
+}
+.nbtab .badge.show{display:flex}
+
+/* ══ TOPBAR / HEADER générique ══ */
+.topbar{
+  flex:0 0 auto;padding:14px 18px 12px;
+  display:flex;align-items:center;gap:12px;
+  background:var(--glass);backdrop-filter:blur(18px);border-bottom:1px solid var(--border);
+}
+.topbar h1{flex:1;margin:0;font-family:var(--fd);font-size:19px;font-weight:800;display:flex;align-items:center;gap:10px}
+.topbar h1 .accent{color:var(--cyan)}
+.topbar .sub{font-size:11px;color:var(--muted);font-family:var(--fm)}
+
+/* ══ STATUS PILL ══ */
+.statpill{
+  display:flex;align-items:center;gap:8px;padding:6px 12px;
+  background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:20px;
+  font-size:11px;font-weight:600;cursor:default;
+}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:blink 2s infinite}
+.dot.err{background:var(--red);box-shadow:0 0 8px var(--red);animation:none}
+.dot.load{background:var(--amber);animation:blink .8s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ══ MAP VIEW ══ */
+#view-map{overflow:hidden}
+#map{flex:1;background:#050810}
+.leaflet-tile{filter:brightness(.9) contrast(1.08) saturate(.8)}
+.leaflet-container{background:#050810;font-family:var(--f)}
+.leaflet-control-zoom{display:none}
+.leaflet-control-attribution{background:rgba(8,11,18,.75)!important;color:var(--dim)!important;backdrop-filter:blur(6px);font-size:10px!important;border-radius:8px 0 0 0!important}
+.leaflet-control-attribution a{color:var(--muted)!important}
+
+/* map topbar override */
+#view-map .topbar{position:absolute;top:0;left:0;right:0;z-index:900;padding:10px 14px}
+#map{position:absolute;inset:0;z-index:1}
+
+/* filtres flottants */
+.map-filters{
+  position:absolute;bottom:12px;left:12px;right:12px;z-index:900;
+  display:flex;gap:8px;flex-wrap:wrap;pointer-events:auto;
+}
+.fchip{
+  display:flex;align-items:center;gap:6px;padding:7px 13px;
+  background:var(--glass);backdrop-filter:blur(14px);border:1px solid var(--border);
+  border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;transition:.18s;
+  box-shadow:var(--shadow-sm);
+}
+.fchip:active,.fchip.on{border-color:var(--cyan);background:rgba(39,211,255,.12);color:var(--cyan)}
+.fchip .dot2{width:8px;height:8px;border-radius:50%;background:var(--cyan);box-shadow:0 0 6px var(--cyan)}
+
+/* compteurs */
+.counters{
+  position:absolute;top:66px;right:12px;z-index:900;
+  display:flex;flex-direction:column;gap:6px;
+}
+.cntbox{
+  display:flex;align-items:center;gap:8px;padding:8px 12px;
+  background:var(--glass2);backdrop-filter:blur(14px);border:1px solid var(--border);
+  border-radius:12px;font-size:12px;box-shadow:var(--shadow-sm);
+}
+.cntbox b{font-family:var(--fd);font-size:17px;font-weight:800;color:var(--cyan);line-height:1}
+.cntbox span{color:var(--muted);font-size:11px}
+
+/* countdown ring */
+.ring{width:32px;height:32px;flex:0 0 auto;position:relative}
+.ring svg{transform:rotate(-90deg)}
+.ring .fg{stroke:var(--cyan);stroke-dasharray:83;transition:stroke-dashoffset .95s linear;filter:drop-shadow(0 0 3px rgba(39,211,255,.7))}
+.ring .bg{stroke:rgba(255,255,255,.10)}
+.ring .nt{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--fm);font-size:10px;color:var(--cyan)}
+
+/* ══ VÉHICULE MARKER ══ */
+.vm{
+  display:flex;align-items:center;gap:4px;padding:3px 8px 3px 3px;border-radius:22px;
+  font-weight:800;font-size:12px;color:#fff;font-family:var(--fd);white-space:nowrap;
+  border:1.5px solid rgba(255,255,255,.5);cursor:pointer;
+  box-shadow:0 4px 14px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.28);
+}
+.vm .ico{width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.25);display:grid;place-items:center;flex:0 0 auto}
+.vm .ico svg{width:11px;height:11px;stroke:#fff;stroke-width:2.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.vm.tram{border-radius:8px}
+.vm::after{content:"";position:absolute;inset:-6px;border-radius:28px;border:1.5px solid currentColor;opacity:0;animation:vring 2.6s ease-out infinite}
+@keyframes vring{0%{transform:scale(.6);opacity:.5}100%{transform:scale(1.6);opacity:0}}
+.vm.tram::after{border-radius:14px}
+.leaflet-marker-icon.vwrap{background:none!important;border:none!important}
+
+/* stop dot */
+.sdot{cursor:pointer}
+
+/* ══ POPUP VÉHICULE ══ */
+.leaflet-popup-content-wrapper{background:var(--glass2);backdrop-filter:blur(16px);color:var(--text);border:1px solid var(--border2);border-radius:14px;box-shadow:var(--shadow)}
+.leaflet-popup-tip-container{display:none}
+.leaflet-popup-content{margin:12px 14px;font-family:var(--f)}
+.leaflet-popup-close-button{color:var(--muted)!important;font-size:18px!important;padding:5px 8px 0 0!important}
+.vph{display:flex;align-items:center;gap:9px;margin-bottom:8px}
+.vpb{font-family:var(--fd);font-weight:800;font-size:14px;color:#fff;padding:4px 10px;border-radius:8px;box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}
+.vpd{font-weight:600;font-size:13px}
+.vpr{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-top:1px dashed rgba(255,255,255,.1)}
+.vpr .k{color:var(--muted)}.vpr .v{font-family:var(--fm)}
+.vpest{margin-top:8px;font-size:10px;color:var(--amber);padding:6px 8px;background:rgba(255,176,32,.08);border-radius:8px;border:1px solid rgba(255,176,32,.25)}
+
+/* ══ SEARCH VIEW ══ */
+.search-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+.search-bar{
+  padding:12px 16px;background:var(--glass);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);
+}
+.search-inp{
+  width:100%;background:rgba(255,255,255,.07);border:1px solid var(--border2);border-radius:14px;
+  padding:13px 16px 13px 44px;color:var(--text);font-family:var(--f);font-size:15px;outline:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%238c9ab5' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:14px center;
+}
+.search-inp:focus{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(39,211,255,.15)}
+.search-inp::placeholder{color:var(--dim)}
+.search-results{flex:1;overflow-y:auto;padding:8px 12px}
+.search-results::-webkit-scrollbar{width:6px}.search-results::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:6px}
+.sr-item{
+  display:flex;align-items:center;gap:13px;padding:13px 14px;border-radius:14px;
+  cursor:pointer;transition:.15s;margin-bottom:4px;
+}
+.sr-item:hover,.sr-item:active{background:rgba(255,255,255,.06)}
+.sr-ico{width:38px;height:38px;border-radius:10px;background:rgba(39,211,255,.12);display:grid;place-items:center;flex:0 0 auto}
+.sr-ico svg{stroke:var(--cyan);stroke-width:2;fill:none;stroke-linecap:round;width:18px;height:18px}
+.sr-meta{flex:1;min-width:0}
+.sr-meta b{display:block;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sr-meta span{font-size:11.5px;color:var(--muted);font-family:var(--fm)}
+.sr-arr{color:var(--dim)}
+.search-empty{padding:48px 24px;text-align:center;color:var(--muted)}
+.search-empty .se-ico{width:56px;height:56px;border-radius:18px;background:rgba(255,255,255,.05);display:grid;place-items:center;margin:0 auto 14px}
+.search-empty .se-ico svg{width:28px;height:28px;stroke:var(--muted);fill:none;stroke-width:1.5;stroke-linecap:round}
+.search-empty h3{margin:0 0 8px;font-family:var(--fd);font-size:16px}
+.search-empty p{margin:0;font-size:13px;line-height:1.55}
+
+/* ══ MODAL ARRÊT ══ */
+.modal-bg{
+  position:fixed;inset:0;z-index:3000;background:rgba(4,6,12,.6);backdrop-filter:blur(5px);
+  display:none;align-items:flex-end;justify-content:center;
+}
+.modal-bg.show{display:flex;animation:fadein .2s}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+.modal{
+  width:100%;max-width:500px;max-height:85vh;margin-bottom:var(--navbar-h);
+  background:var(--glass2);backdrop-filter:blur(24px);
+  border:1px solid var(--border2);border-radius:22px 22px 0 0;
+  box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column;
+  animation:slideup .28s cubic-bezier(.2,.9,.25,1);
+}
+@keyframes slideup{from{transform:translateY(50px);opacity:.4}to{transform:translateY(0);opacity:1}}
+.modal-h{
+  padding:20px 20px 16px;border-bottom:1px solid var(--border);flex:0 0 auto;
+  background:linear-gradient(180deg,rgba(255,255,255,.04),transparent);
+}
+.modal-h .grab{width:40px;height:4px;border-radius:4px;background:rgba(255,255,255,.2);margin:0 auto 12px}
+.modal-h .ey{font-size:10px;letter-spacing:1.8px;text-transform:uppercase;color:var(--cyan);font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+.modal-h .ey .ref{background:rgba(39,211,255,.12);padding:2px 8px;border-radius:6px;font-family:var(--fm)}
+.modal-h h3{margin:0;font-family:var(--fd);font-size:21px;font-weight:800;padding-right:40px}
+.modal-h .lines-row{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}
+.lchip{display:inline-flex;align-items:center;padding:3px 9px;border-radius:8px;font-family:var(--fd);font-weight:800;font-size:12px;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}
+.close-btn{
+  position:absolute;top:16px;right:16px;width:36px;height:36px;border-radius:10px;
+  background:rgba(255,255,255,.07);border:1px solid var(--border);cursor:pointer;
+  display:grid;place-items:center;color:var(--text);font-size:22px;line-height:1;transition:.15s;
+}
+.close-btn:hover{background:var(--red);border-color:var(--red);transform:rotate(90deg)}
+.modal-body{flex:1;overflow-y:auto;padding-bottom:8px}
+.modal-body::-webkit-scrollbar{width:7px}.modal-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:6px}
+
+.dep{display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.05);cursor:default}
+.dep:hover{background:rgba(255,255,255,.025)}
+.dep .ln{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;flex:0 0 auto;font-family:var(--fd);font-weight:900;font-size:18px;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 3px 10px rgba(0,0,0,.5)}
+.dep .mid{flex:1;min-width:0}
+.dep .mid .dn{font-weight:600;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dep .mid .dm{display:flex;align-items:center;gap:7px;margin-top:3px;font-size:11.5px;color:var(--muted)}
+.dbadge{font-size:9px;font-weight:700;letter-spacing:.5px;padding:2px 7px;border-radius:6px;text-transform:uppercase}
+.dbadge.rt{background:rgba(31,217,154,.15);color:var(--green)}
+.dbadge.th{background:rgba(140,152,173,.12);color:var(--muted)}
+.dep .right{text-align:right;flex:0 0 auto}
+.dep .right .mn{font-family:var(--fd);font-weight:900;font-size:22px;line-height:1;display:flex;align-items:baseline;gap:3px}
+.dep .right .mn.soon{color:var(--pink)}
+.dep .right .mn small{font-size:11px;font-weight:600;color:var(--muted)}
+.dep .right .hr{font-family:var(--fm);font-size:11px;color:var(--muted);margin-top:2px}
+.dep-load{padding:32px 20px;text-align:center;color:var(--muted);font-size:13px}
+.dep-load .sp{width:28px;height:28px;border-radius:50%;border:3px solid rgba(255,255,255,.12);border-top-color:var(--cyan);margin:0 auto 12px;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.dep-empty{padding:40px 20px;text-align:center;color:var(--muted);font-size:13px}
+.dep-refresh{text-align:center;padding:10px 20px 6px;font-size:11px;color:var(--dim)}
+
+/* ══ FAVORIS ══ */
+.fav-wrap{flex:1;overflow-y:auto;background:var(--bg)}
+.fav-wrap::-webkit-scrollbar{width:6px}.fav-wrap::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:6px}
+.fav-section{padding:10px 14px 6px}
+.fav-stitle{font-size:10px;letter-spacing:1.8px;text-transform:uppercase;color:var(--dim);font-weight:600;padding:0 2px 8px}
+.fav-empty{padding:60px 28px;text-align:center}
+.fav-empty .fe-ico{width:64px;height:64px;border-radius:20px;background:rgba(255,255,255,.04);display:grid;place-items:center;margin:0 auto 16px}
+.fav-empty .fe-ico svg{width:30px;height:30px;stroke:var(--muted);fill:none;stroke-width:1.5;stroke-linecap:round}
+.fav-empty h3{font-family:var(--fd);font-size:17px;margin:0 0 8px}
+.fav-empty p{font-size:13px;color:var(--muted);line-height:1.55;margin:0}
+.fav-card{
+  background:var(--glass);border:1px solid var(--border);border-radius:14px;
+  margin-bottom:10px;overflow:hidden;
+}
+.fav-card-h{
+  display:flex;align-items:center;gap:12px;padding:13px 15px;cursor:pointer;transition:.15s;
+}
+.fav-card-h:hover{background:rgba(255,255,255,.04)}
+.fav-card-h .fco{width:36px;height:36px;border-radius:10px;background:rgba(39,211,255,.12);display:grid;place-items:center;flex:0 0 auto}
+.fav-card-h .fco svg{stroke:var(--cyan);fill:none;stroke-width:2;stroke-linecap:round;width:18px;height:18px}
+.fav-card-h .fn{flex:1;font-weight:600;font-size:14px}
+.fav-card-h .fdel{color:var(--dim);font-size:20px;cursor:pointer;padding:4px;border-radius:8px;transition:.15s}
+.fav-card-h .fdel:hover{color:var(--red);background:rgba(226,0,26,.12)}
+.fav-deps{padding:0 15px 10px;display:flex;flex-direction:column;gap:4px}
+.fdep{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-radius:10px;background:rgba(255,255,255,.03)}
+.fdep .fl{display:flex;align-items:center;gap:9px;min-width:0}
+.fdep .fln{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-family:var(--fd);font-weight:900;font-size:13px;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.25);flex:0 0 auto}
+.fdep .fdd{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px}
+.fdep .fdm{font-family:var(--fd);font-weight:800;font-size:15px;display:flex;align-items:baseline;gap:2px}
+.fdep .fdm.soon{color:var(--pink)}
+.fdep .fdm small{font-size:10px;color:var(--muted);font-weight:600}
+
+/* ══ INFO VIEW ══ */
+.info-wrap{flex:1;overflow-y:auto;background:var(--bg);padding:14px}
+.info-wrap::-webkit-scrollbar{width:6px}.info-wrap::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:6px}
+.info-card{background:var(--glass);border:1px solid var(--border);border-radius:14px;margin-bottom:12px;overflow:hidden}
+.info-card-h{padding:14px 16px 12px;border-bottom:1px solid var(--border)}
+.info-card-h .ict{font-size:10px;letter-spacing:1.6px;text-transform:uppercase;color:var(--dim);font-weight:600;margin-bottom:4px}
+.info-card-h .icn{font-family:var(--fd);font-size:15px;font-weight:700}
+.info-row{display:flex;justify-content:space-between;align-items:center;padding:11px 16px;border-bottom:1px solid rgba(255,255,255,.04);font-size:13px}
+.info-row:last-child{border-bottom:none}
+.info-row .k{color:var(--muted)}
+.info-row .v{font-family:var(--fm);font-size:12px;text-align:right;max-width:200px;overflow:hidden;text-overflow:ellipsis}
+.info-row .v.ok{color:var(--green)}.info-row .v.err{color:var(--red)}
+.api-status-big{
+  padding:18px 16px;display:flex;align-items:center;gap:14px;
+}
+.api-big-icon{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;flex:0 0 auto;background:rgba(31,217,154,.12)}
+.api-big-icon svg{stroke:var(--green);fill:none;stroke-width:2;stroke-linecap:round;width:24px;height:24px}
+.api-big-icon.err{background:rgba(226,0,26,.12)}.api-big-icon.err svg{stroke:var(--red)}
+.api-big-txt b{display:block;font-family:var(--fd);font-size:15px;font-weight:700}
+.api-big-txt span{font-size:12px;color:var(--muted)}
+
+.lines-grid{display:flex;flex-wrap:wrap;gap:8px;padding:14px 16px}
+.lg-item{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid var(--border);font-size:12.5px;font-weight:600;flex:1 0 auto}
+.lg-dot{width:14px;height:14px;border-radius:4px;flex:0 0 auto}
+
+.about-txt{padding:14px 16px;font-size:12.5px;color:var(--muted);line-height:1.6}
+.about-txt a{color:var(--cyan);text-decoration:none}
+.heart{color:var(--red);animation:beat 1.6s infinite;display:inline-block}
+@keyframes beat{0%,100%{transform:scale(1)}30%{transform:scale(1.25)}60%{transform:scale(.93)}}
+
+/* ══ TOAST ══ */
+.toast{
+  position:fixed;bottom:calc(var(--navbar-h) + 12px);left:50%;transform:translateX(-50%) translateY(12px);
+  z-index:5000;background:var(--glass2);border:1px solid var(--border2);border-radius:12px;
+  padding:10px 18px;font-size:13px;font-weight:500;box-shadow:var(--shadow);
+  opacity:0;transition:.22s;pointer-events:none;white-space:nowrap;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ══ Responsive small ══ */
+@media(max-width:480px){
+  .topbar h1{font-size:16px}
+  .dep .mid .dn{font-size:13px}
+  .dep .right .mn{font-size:19px}
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════ VUE MAP ═══════════ -->
+<div class="view active" id="view-map">
+  <div class="topbar">
+    <h1>STRASS<span class="accent">'</span>CITY <span style="font-size:13px;font-weight:500;color:var(--muted)">CTS Live</span></h1>
+    <div class="statpill"><span class="dot" id="dot-status"></span><span id="txt-status">Init…</span></div>
+  </div>
+  <div id="map"></div>
+
+  <div class="counters">
+    <div class="cntbox">
+      <div>
+        <b id="cnt-tram">—</b>
+        <span style="display:block">trams</span>
+      </div>
+      <svg style="stroke:var(--red);fill:none;stroke-width:2;stroke-linecap:round;width:18px;height:18px" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="12" rx="2.5"/><path d="M5 10h14M9 15l-1.5 4M15 15l1.5 4M9 3v-2M15 3v-2"/></svg>
+    </div>
+    <div class="cntbox">
+      <div>
+        <b id="cnt-bus">—</b>
+        <span style="display:block">bus</span>
+      </div>
+      <svg style="stroke:var(--cyan);fill:none;stroke-width:2;stroke-linecap:round;width:18px;height:18px" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="11" rx="2"/><path d="M3 11h18M8 16v3M16 16v3"/></svg>
+    </div>
+    <div class="ring">
+      <svg width="32" height="32" viewBox="0 0 32 32">
+        <circle class="bg" cx="16" cy="16" r="13" fill="none" stroke-width="3"/>
+        <circle class="fg" id="ring-fg" cx="16" cy="16" r="13" fill="none" stroke-width="3" stroke-dasharray="81.7" stroke-dashoffset="0" stroke-linecap="round"/>
+      </svg>
+      <div class="nt" id="ring-n">15</div>
+    </div>
+  </div>
+
+  <div class="map-filters">
+    <div class="fchip on" data-l="tram"><span class="dot2" style="background:#E2001A;box-shadow:0 0 6px #E2001A"></span>Trams</div>
+    <div class="fchip on" data-l="bus"><span class="dot2"></span>Bus</div>
+    <div class="fchip on" data-l="stops"><span class="dot2" style="background:rgba(255,255,255,.4)"></span>Arrêts</div>
+    <div class="fchip" data-l="pr"><span class="dot2" style="background:var(--green);box-shadow:0 0 6px var(--green)"></span>P+R</div>
+  </div>
+</div>
+
+<!-- ═══════════ VUE RECHERCHE ═══════════ -->
+<div class="view" id="view-search">
+  <div class="topbar"><h1>Recherche <span class="accent">arrêts</span></h1></div>
+  <div class="search-wrap">
+    <div class="search-bar">
+      <input class="search-inp" id="search-inp" placeholder="Nom d'arrêt, ex : Homme de Fer…" autocomplete="off" spellcheck="false"/>
+    </div>
+    <div class="search-results" id="search-results">
+      <div class="search-empty">
+        <div class="se-ico"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></div>
+        <h3>Cherche un arrêt</h3>
+        <p>Tape le nom d'un arrêt CTS pour voir ses prochains passages en temps réel.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ VUE FAVORIS ═══════════ -->
+<div class="view" id="view-favs">
+  <div class="topbar">
+    <h1>Mes <span class="accent">favoris</span></h1>
+    <button id="refresh-favs" style="background:rgba(39,211,255,.1);border:1px solid rgba(39,211,255,.3);color:var(--cyan);padding:7px 14px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer">↻ Rafraîchir</button>
+  </div>
+  <div class="fav-wrap" id="fav-wrap"></div>
+</div>
+
+<!-- ═══════════ VUE INFOS ═══════════ -->
+<div class="view" id="view-info">
+  <div class="topbar"><h1>À <span class="accent">propos</span></h1></div>
+  <div class="info-wrap">
+
+    <div class="info-card">
+      <div class="api-status-big">
+        <div class="api-big-icon" id="api-big-ico">
+          <svg viewBox="0 0 24 24"><path d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"/></svg>
+        </div>
+        <div class="api-big-txt"><b id="api-big-label">Connexion…</b><span id="api-big-sub">API CTS SIRI-lite</span></div>
+      </div>
+    </div>
+
+    <div class="info-card">
+      <div class="info-card-h"><div class="ict">Données API</div><div class="icn">CTS Open Data</div></div>
+      <div class="info-row"><span class="k">Endpoint</span><span class="v">api.cts-strasbourg.eu</span></div>
+      <div class="info-row"><span class="k">Protocole</span><span class="v">SIRI 2.0 Lite (REST JSON)</span></div>
+      <div class="info-row"><span class="k">Refresh</span><span class="v">15 s (conforme accord CTS)</span></div>
+      <div class="info-row"><span class="k">Token</span><span class="v ok" id="info-token">Via Worker (sécurisé)</span></div>
+      <div class="info-row"><span class="k">Arrêts chargés</span><span class="v" id="info-stops">—</span></div>
+      <div class="info-row"><span class="k">Dernière MAJ</span><span class="v" id="info-last">—</span></div>
+    </div>
+
+    <div class="info-card">
+      <div class="info-card-h"><div class="ict">Lignes du réseau</div><div class="icn">Trams &amp; Bus CTS</div></div>
+      <div class="lines-grid">
+        <div class="lg-item"><span class="lg-dot" style="background:var(--tramA)"></span>Tram A</div>
+        <div class="lg-item"><span class="lg-dot" style="background:var(--tramB)"></span>Tram B</div>
+        <div class="lg-item"><span class="lg-dot" style="background:var(--tramC)"></span>Tram C</div>
+        <div class="lg-item"><span class="lg-dot" style="background:var(--tramD)"></span>Tram D</div>
+        <div class="lg-item"><span class="lg-dot" style="background:var(--tramE)"></span>Tram E</div>
+        <div class="lg-item"><span class="lg-dot" style="background:var(--tramF)"></span>Tram F</div>
+        <div class="lg-item"><span class="lg-dot" style="background:var(--bus)"></span>Lignes Bus</div>
+      </div>
+    </div>
+
+    <div class="info-card">
+      <div class="info-card-h"><div class="ict">Transparence technique</div><div class="icn">Source des positions</div></div>
+      <div class="about-txt">
+        L'API CTS (<a href="https://api.cts-strasbourg.eu" target="_blank">api.cts-strasbourg.eu</a>) ne fournit pas de coordonnées GPS en temps réel pour les véhicules (aucun endpoint <code style="background:rgba(255,255,255,.07);padding:1px 5px;border-radius:4px;font-size:11px">vehicle-monitoring</code>). Les positions affichées sur la carte sont <b>estimées</b> par interpolation des tracés théoriques (GTFS) ajustée aux retards observés via l'API <code style="background:rgba(255,255,255,.07);padding:1px 5px;border-radius:4px;font-size:11px">estimated-timetable</code>. Les <b>horaires au clic sur un arrêt sont 100% réels et temps réel</b> (stop-monitoring). Cette approche a été présentée et validée par la CTS (mai 2026).
+      </div>
+    </div>
+
+    <div class="info-card" style="margin-bottom:4px">
+      <div class="about-txt" style="text-align:center;padding:16px">
+        <span class="heart">♥</span> Créé par <b>Brice Jacotet</b> · <a href="https://www.alpha-korner.com" target="_blank">Alpha Korner</a> · Groupe Alpha Nex Strasbourg
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL ARRÊT ═══════════ -->
+<div class="modal-bg" id="modal-bg">
+  <div class="modal">
+    <div class="modal-h">
+      <div class="grab"></div>
+      <div class="ey">Arrêt CTS <span class="ref" id="m-ref">—</span></div>
+      <h3 id="m-name">—</h3>
+      <div class="lines-row" id="m-lines"></div>
+      <div class="close-btn" id="m-close">×</div>
+    </div>
+    <div class="modal-body" id="m-body">
+      <div class="dep-load"><div class="sp"></div>Lecture des passages en temps réel…</div>
+    </div>
+    <div class="dep-refresh" id="dep-refresh"></div>
+  </div>
+</div>
+
+<!-- ═══════════ NAVBAR ═══════════ -->
+<nav class="navbar">
+  <div class="nbtab active" data-view="map">
+    <svg viewBox="0 0 24 24"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>
+    <span>Carte</span>
+  </div>
+  <div class="nbtab" data-view="search">
+    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <span>Recherche</span>
+  </div>
+  <div class="nbtab" data-view="favs">
+    <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+    <span>Favoris</span>
+    <span class="badge" id="fav-badge">0</span>
+  </div>
+  <div class="nbtab" data-view="info">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+    <span>Infos</span>
+  </div>
+</nav>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+/* ═══════════════════════════════════════════════════
+   STRASS'CITY — app logic
+   ═══════════════════════════════════════════════════ */
+"use strict";
+
+/* ── Couleurs lignes ── */
+const LINE_COLOR={A:"#E2001A",B:"#009FE3",C:"#F39200",D:"#50AF31",E:"#A04199",F:"#E5007D"};
+function lc(name,mode){
+  const n=String(name||"").trim().toUpperCase();
+  if(LINE_COLOR[n]) return LINE_COLOR[n];
+  if(mode==="tram"&&n.length===1) return LINE_COLOR[n]||"#c0392b";
+  return "#4a5e80";
+}
+
+/* ── Helpers SIRI ── */
+const asA=x=>x==null?[]:(Array.isArray(x)?x:[x]);
+function txt(v){
+  if(v==null) return "";
+  if(typeof v==="string"||typeof v==="number") return String(v);
+  if(Array.isArray(v)) return v.map(txt).filter(Boolean)[0]||"";
+  if(typeof v==="object") return txt(v.value??v.Value??v.text??v.name??"");
+  return "";
+}
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function deep(o,path){return path.split(".").reduce((a,k)=>a&&a[k]!=null?a[k]:null,o);}
+function firstD(data,key){
+  for(const c of[
+    deep(data,"Siri.ServiceDelivery."+key),
+    deep(data,"ServiceDelivery."+key),
+    data&&data[key],
+    deep(data,"Siri."+key),
+  ]) if(c!=null) return asA(c);
+  return [];
+}
+
+/* ── API ── */
+const Api={
+  async get(path){
+    const base=PROXY.replace(/\/+$/,"");
+    const r=await fetch(base+path,{headers:{Accept:"application/json"}});
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return r.json();
+  },
+  stops(){ return this.get("/siri/2.0/stoppoints-discovery"); },
+  et(){ return this.get("/siri/2.0/estimated-timetable"); },
+  sm(ref){ return this.get("/siri/2.0/stop-monitoring?MonitoringRef="+encodeURIComponent(ref)+"&PreviewInterval=PT90M&MaximumStopVisits=10"); },
+  pr(){ return this.get("/cts/park-and-ride"); },
+};
+
+/* ── État ── */
+const St={
+  map:null, canvas:null,
+  lStops:null, lVeh:null, lPr:null,
+  stops:new Map(),        // ref→{ref,name,lat,lng,lines:[]}
+  veh:new Map(),          // key→marker
+  show:{tram:true,bus:true,stops:true,pr:false},
+  favs:[],                // [{ref,name}]
+  cd:15, timer:null, tick:null,
+  modalRef:null,
+  curView:"map",
+  apiOk:false,
+};
+
+/* ── MAP INIT ── */
+function initMap(){
+  St.map=L.map("map",{zoomControl:false,preferCanvas:true,attributionControl:true})
+          .setView([48.5839,7.7455],13);
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{
+    maxZoom:19,subdomains:"abcd",
+    attribution:'&copy; <a href="https://www.openstreetmap.org">OSM</a> &copy; <a href="https://carto.com">CARTO</a> · Données CTS'
+  }).addTo(St.map);
+  St.canvas=L.canvas({padding:0.5});
+  St.lStops=L.layerGroup().addTo(St.map);
+  St.lVeh  =L.layerGroup().addTo(St.map);
+  St.lPr   =L.layerGroup();
+  St.map.on("zoomend",drawStops);
+}
+
+/* ── ARRÊTS ── */
+async function loadStops(){
+  let data;
+  try{ data=await Api.stops(); }catch(e){ setStatus(false,"Arrêts: "+e.message); throw e; }
+  const dels=firstD(data,"StopPointsDelivery");
+  let raw=[];
+  for(const d of dels) raw=raw.concat(asA(d?.AnnotatedStopPointRef??d));
+  if(!raw.length) raw=asA(deep(data,"Siri.StopPointsDelivery.AnnotatedStopPointRef")||deep(data,"StopPointsDelivery.AnnotatedStopPointRef"));
+  St.stops.clear();
+  for(const s of raw){
+    const ref=txt(s.StopPointRef||s.Ref);
+    const loc=s.Location||s.location||{};
+    const lat=parseFloat(loc.Latitude??loc.latitude??s.Latitude);
+    const lng=parseFloat(loc.Longitude??loc.longitude??s.Longitude);
+    if(!ref||isNaN(lat)||isNaN(lng)) continue;
+    const lines=asA(s.Lines&&(s.Lines.LineRef||s.Lines)).map(txt).filter(Boolean);
+    if(!St.stops.has(ref)) St.stops.set(ref,{ref,name:txt(s.StopName||s.stopName)||ref,lat,lng,lines});
+  }
+  document.getElementById("info-stops").textContent=St.stops.size+" arrêts";
+  drawStops();
+}
+
+function drawStops(){
+  if(!St.lStops) return;
+  St.lStops.clearLayers();
+  if(!St.show.stops) return;
+  if(St.map.getZoom()<12) return;
+  const b=St.map.getBounds().pad(0.3);
+  St.stops.forEach(s=>{
+    if(!b.contains([s.lat,s.lng])) return;
+    const m=L.circleMarker([s.lat,s.lng],{renderer:St.canvas,radius:4.5,color:"rgba(255,255,255,0.7)",weight:1.5,fillColor:"#1a2540",fillOpacity:1,className:"sdot"});
+    m.bindTooltip(s.name,{direction:"top",offset:[0,-5],permanent:false,className:""});
+    m.on("click",()=>openModal(s));
+    m.on("mouseover",function(){this.setStyle({radius:7,fillColor:"#27d3ff",color:"#fff"});});
+    m.on("mouseout", function(){this.setStyle({radius:4.5,fillColor:"#1a2540",color:"rgba(255,255,255,0.7)"});});
+    St.lStops.addLayer(m);
+  });
+}
+
+/* ── VÉHICULES ── */
+async function refreshVeh(){
+  let data;
+  try{
+    data=await Api.et();
+    setStatus(true,"MAJ "+new Date().toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit",second:"2-digit"}));
+    document.getElementById("info-last").textContent=new Date().toLocaleTimeString("fr-FR");
+  }catch(e){ setStatus(false,e.message); return; }
+
+  const dels=firstD(data,"EstimatedTimetableDelivery");
+  let journeys=[];
+  for(const d of dels){
+    for(const f of asA(d.EstimatedJourneyVersionFrame||d))
+      journeys=journeys.concat(asA(f.EstimatedVehicleJourney||f));
+  }
+  const now=Date.now(),seen=new Set();
+  let nT=0,nB=0;
+
+  for(const j of journeys){
+    const modeR=txt(j.VehicleMode).toLowerCase();
+    const mode=modeR.includes("tram")?"tram":"bus";
+    const line=txt(j.PublishedLineName)||txt(j.LineRef);
+    const dir=txt(j.DirectionRef);
+    const dest=txt(j.DestinationName)||txt(j.DirectionName)||"—";
+
+    const calls=asA(j.EstimatedCalls?.EstimatedCall??j.EstimatedCalls)
+      .map(c=>{
+        const ref=txt(c.StopPointRef||c.StopPointName);
+        const s=St.stops.get(ref);
+        const t=Date.parse(txt(c.ExpectedDepartureTime)||txt(c.ExpectedArrivalTime)||txt(c.AimedDepartureTime)||"");
+        return s&&!isNaN(t)?{lat:s.lat,lng:s.lng,t,name:s.name}:null;
+      }).filter(Boolean).sort((a,b)=>a.t-b.t);
+    if(!calls.length) continue;
+
+    let prev=null,next=null;
+    for(const c of calls){if(c.t<=now) prev=c; else{next=c;break;}}
+    let pos,ns;
+    if(prev&&next){
+      const f=Math.max(0,Math.min(1,(now-prev.t)/(next.t-prev.t||1)));
+      pos=[prev.lat+(next.lat-prev.lat)*f,prev.lng+(next.lng-prev.lng)*f];ns=next;
+    }else if(!prev&&next){pos=[next.lat,next.lng];ns=next;}
+    else continue;
+
+    if(mode==="tram") nT++; else nB++;
+    if(mode==="tram"&&!St.show.tram) continue;
+    if(mode==="bus" &&!St.show.bus)  continue;
+
+    const key=[line,dir,dest,calls[0].t].join("|");
+    seen.add(key);
+    upsertVeh(key,pos,{line,dest,mode,ns,now});
+  }
+
+  St.veh.forEach((m,k)=>{if(!seen.has(k)){St.lVeh.removeLayer(m);St.veh.delete(k);}});
+  document.getElementById("cnt-tram").textContent=nT;
+  document.getElementById("cnt-bus").textContent=nB;
+}
+
+function mkVehHTML(line,mode,color){
+  const s=mode==="tram"
+    ?'<svg viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="11" rx="2"/><path d="M6 9h12M9 14l-1 3M15 14l1 3"/></svg>'
+    :'<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="9" rx="2"/><path d="M4 10h16M8 14v3M16 14v3"/></svg>';
+  return '<div class="vm '+mode+'" style="background:'+color+';color:'+color+'"><span class="ico">'+s+'</span><span style="color:#fff">'+esc(line||"?")+'</span></div>';
+}
+function upsertVeh(key,pos,info){
+  const color=lc(info.line,info.mode);
+  let m=St.veh.get(key);
+  if(!m){
+    const icon=L.divIcon({className:"vwrap",html:mkVehHTML(info.line,info.mode,color),iconSize:[46,26],iconAnchor:[23,13]});
+    m=L.marker(pos,{icon,riseOnHover:true,zIndexOffset:500});
+    m.addTo(St.lVeh); St.veh.set(key,m);
+  }else m.setLatLng(pos);
+  const mins=info.ns?Math.max(0,Math.round((info.ns.t-info.now)/60000)):null;
+  m.bindPopup(
+    '<div class="vph"><span class="vpb" style="background:'+color+'">'+esc(info.line)+'</span><span class="vpd">→ '+esc(info.dest)+'</span></div>'
+    +(info.ns?'<div class="vpr"><span class="k">Prochain arrêt</span><span class="v">'+esc(info.ns.name)+'</span></div>'
+       +'<div class="vpr"><span class="k">Arrivée estimée</span><span class="v">'+(mins===0?"imminent":mins+" min")+'</span></div>':"")
+    +'<div class="vpr"><span class="k">Mode</span><span class="v">'+(info.mode==="tram"?"Tramway":"Bus")+'</span></div>'
+    +'<div class="vpest">◆ Position estimée (interpolation GTFS + retards SIRI)</div>',
+    {maxWidth:240}
+  );
+}
+
+/* ── P+R ── */
+async function loadPR(){
+  let data; try{data=await Api.pr();}catch(e){toast("P+R: "+e.message);return;}
+  let arr=[];
+  const scan=o=>{if(Array.isArray(o)&&o.length&&typeof o[0]==="object"){arr=o;return;}if(o&&typeof o==="object")for(const k in o)scan(o[k]);};
+  scan(data);
+  St.lPr.clearLayers();
+  let n=0;
+  arr.forEach(p=>{
+    const lat=parseFloat(p.latitude??p.Latitude??p.location?.latitude);
+    const lng=parseFloat(p.longitude??p.Longitude??p.location?.longitude);
+    const name=txt(p.name||p.Name||p.label||"P+R");
+    const free=p.available??p.free??p.placesDisponibles??p.availableSpaces;
+    const cap=p.total??p.capacity??p.capaciteMax;
+    if(isNaN(lat)||isNaN(lng)) return;
+    n++;
+    const icon=L.divIcon({className:"vwrap",iconSize:[32,32],iconAnchor:[16,16],
+      html:'<div style="width:30px;height:30px;border-radius:10px;background:#1fd99a;color:#04140d;display:grid;place-items:center;font-family:var(--fd);font-weight:900;font-size:14px;border:2px solid #fff;box-shadow:0 3px 12px rgba(0,0,0,.5);letter-spacing:0">P</div>'});
+    const m=L.marker([lat,lng],{icon,zIndexOffset:400});
+    m.bindPopup('<div class="vph"><span class="vpb" style="background:#1fd99a;color:#04140d">P+R</span><span class="vpd">'+esc(name)+'</span></div>'
+      +(free!=null?'<div class="vpr"><span class="k">Places libres</span><span class="v">'+esc(String(free))+(cap!=null?' / '+cap:'')+'</span></div>':''));
+    St.lPr.addLayer(m);
+  });
+  toast(n+" parkings-relais chargés");
+}
+
+/* ── MODAL ARRÊT (horaires réels stop-monitoring) ── */
+function openModal(s){
+  St.modalRef=s.ref;
+  document.getElementById("m-name").textContent=s.name;
+  document.getElementById("m-ref").textContent=s.ref;
+  document.getElementById("m-lines").innerHTML=s.lines.map(l=>{
+    const c=lc(l,null);
+    return '<span class="lchip" style="background:'+c+'">'+esc(l)+'</span>';
+  }).join("");
+  document.getElementById("m-body").innerHTML='<div class="dep-load"><div class="sp"></div>Chargement en temps réel…</div>';
+  document.getElementById("dep-refresh").textContent="";
+  document.getElementById("modal-bg").classList.add("show");
+  fetchModal(s);
+}
+async function fetchModal(s){
+  let data;
+  try{data=await Api.sm(s.ref);}catch(e){
+    document.getElementById("m-body").innerHTML='<div class="dep-empty">Erreur : '+esc(e.message)+'</div>';return;
+  }
+  if(St.modalRef!==s.ref) return;
+  const dels=firstD(data,"StopMonitoringDelivery");
+  let visits=[];
+  for(const d of dels) visits=visits.concat(asA(d.MonitoredStopVisit||d));
+
+  const now=Date.now();
+  const rows=visits.map(v=>{
+    const j=v.MonitoredVehicleJourney||v.monitoredVehicleJourney||{};
+    const call=j.MonitoredCall||j.monitoredCall||{};
+    const line=txt(j.PublishedLineName)||txt(j.LineRef);
+    const dest=txt(j.DestinationName)||txt(j.DirectionName)||txt(call.DestinationDisplay)||"—";
+    const modeR=txt(j.VehicleMode).toLowerCase();
+    const mode=modeR.includes("tram")?"tram":"bus";
+    const exp=Date.parse(txt(call.ExpectedDepartureTime)||txt(call.ExpectedArrivalTime)||"");
+    const aim=Date.parse(txt(call.AimedDepartureTime)||txt(call.AimedArrivalTime)||"");
+    const t=!isNaN(exp)?exp:aim;
+    const rt=!isNaN(exp);
+    return isNaN(t)?null:{line,dest,mode,t,rt};
+  }).filter(Boolean).sort((a,b)=>a.t-b.t);
+
+  if(!rows.length){document.getElementById("m-body").innerHTML='<div class="dep-empty">Aucun passage annoncé<br><small>Fin de service ou pas de données</small></div>';return;}
+
+  document.getElementById("m-body").innerHTML=rows.map(r=>{
+    const c=lc(r.line,r.mode);
+    const mins=Math.max(0,Math.round((r.t-now)/60000));
+    const hr=new Date(r.t).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});
+    const soon=mins<=2;
+    const mText=mins===0?'<span class="mn soon"><small>à quai</small></span>'
+                        :'<span class="mn'+(soon?" soon":"")+'">'+mins+' <small>min</small></span>';
+    return '<div class="dep">'
+      +'<div class="ln" style="background:'+c+'">'+esc(r.line||"?")+'</div>'
+      +'<div class="mid"><div class="dn">→ '+esc(r.dest)+'</div>'
+      +'<div class="dm"><span class="dbadge '+(r.rt?"rt":"th")+'">'+(r.rt?"temps réel":"théorique")+'</span>'
+      +esc(r.mode==="tram"?"Tramway":"Bus")+'</div></div>'
+      +'<div class="right">'+mText+'<div class="hr">'+hr+'</div></div></div>';
+  }).join("");
+  document.getElementById("dep-refresh").textContent="Mis à jour à "+new Date().toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+
+  // Propose d'ajouter en favori si pas déjà là
+  const isFav=St.favs.some(f=>f.ref===s.ref);
+  const favEl=document.createElement("div");
+  favEl.style.cssText="padding:10px 20px 6px;text-align:center";
+  favEl.innerHTML=isFav
+    ?'<button onclick="removeFav(\''+esc(s.ref)+'\')" style="background:rgba(226,0,26,.1);border:1px solid rgba(226,0,26,.3);color:#ff5e72;padding:8px 20px;border-radius:10px;font-size:12px;cursor:pointer">⭐ Retirer des favoris</button>'
+    :'<button onclick="addFav(\''+esc(s.ref)+'\',\''+esc(s.name)+'\')" style="background:rgba(39,211,255,.1);border:1px solid rgba(39,211,255,.3);color:var(--cyan);padding:8px 20px;border-radius:10px;font-size:12px;cursor:pointer">☆ Ajouter aux favoris</button>';
+  document.getElementById("m-body").appendChild(favEl);
+}
+function closeModal(){document.getElementById("modal-bg").classList.remove("show");St.modalRef=null;}
+
+/* ── FAVORIS ── */
+function loadFavs(){try{const s=localStorage.getItem("sc_favs");if(s)St.favs=JSON.parse(s);}catch(e){}}
+function saveFavs(){try{localStorage.setItem("sc_favs",JSON.stringify(St.favs));}catch(e){}}
+function addFav(ref,name){
+  if(!St.favs.some(f=>f.ref===ref)){St.favs.push({ref,name});saveFavs();updateFavBadge();renderFavs();toast("⭐ "+name+" ajouté aux favoris");closeModal();}
+}
+function removeFav(ref){St.favs=St.favs.filter(f=>f.ref!==ref);saveFavs();updateFavBadge();renderFavs();toast("Retiré des favoris");}
+function updateFavBadge(){
+  const b=document.getElementById("fav-badge");
+  if(St.favs.length>0){b.textContent=St.favs.length;b.classList.add("show");}else b.classList.remove("show");
+}
+async function renderFavs(){
+  const wrap=document.getElementById("fav-wrap");
+  if(!St.favs.length){
+    wrap.innerHTML='<div class="fav-empty"><div class="fe-ico"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div><h3>Aucun favori</h3><p>Clique sur un arrêt sur la carte ou dans la recherche, puis ajoute-le à tes favoris pour accéder rapidement à ses horaires.</p></div>';
+    return;
+  }
+  wrap.innerHTML='<div class="fav-section"><div class="fav-stitle">Tes arrêts favoris</div>'
+    +St.favs.map(f=>'<div class="fav-card">'
+      +'<div class="fav-card-h" onclick="openFavStop(\''+esc(f.ref)+'\',\''+esc(f.name)+'\')">'
+      +'<span class="fco"><svg viewBox="0 0 24 24"><circle cx="12" cy="10" r="3"/><path d="M12 2a8 8 0 0 0-8 8c0 5 8 12 8 12s8-7 8-12a8 8 0 0 0-8-8z"/></svg></span>'
+      +'<span class="fn">'+esc(f.name)+'</span>'
+      +'<span class="fdel" onclick="event.stopPropagation();removeFav(\''+esc(f.ref)+'\')">×</span>'
+      +'</div><div class="fav-deps" id="fav-deps-'+esc(f.ref)+'"><div style="padding:4px 6px;font-size:11px;color:var(--dim)">Clic pour voir les horaires…</div></div>'
+      +'</div>').join("")+'</div>';
+}
+function openFavStop(ref,name){
+  const s=St.stops.get(ref)||{ref,name,lat:0,lng:0,lines:[]};
+  openModal(s);
+}
+async function refreshFavsDeps(){
+  if(!St.favs.length) return;
+  const now=Date.now();
+  for(const f of St.favs){
+    const el=document.getElementById("fav-deps-"+f.ref);
+    if(!el) continue;
+    try{
+      const data=await Api.sm(f.ref);
+      const dels=firstD(data,"StopMonitoringDelivery");
+      let visits=[];
+      for(const d of dels) visits=visits.concat(asA(d.MonitoredStopVisit||d));
+      const rows=visits.map(v=>{
+        const j=v.MonitoredVehicleJourney||v.monitoredVehicleJourney||{};
+        const call=j.MonitoredCall||j.monitoredCall||{};
+        const line=txt(j.PublishedLineName)||txt(j.LineRef);
+        const dest=txt(j.DestinationName)||txt(j.DirectionName)||"—";
+        const modeR=txt(j.VehicleMode).toLowerCase();
+        const mode=modeR.includes("tram")?"tram":"bus";
+        const exp=Date.parse(txt(call.ExpectedDepartureTime)||txt(call.ExpectedArrivalTime)||"");
+        const aim=Date.parse(txt(call.AimedDepartureTime)||txt(call.AimedArrivalTime)||"");
+        const t=!isNaN(exp)?exp:aim;
+        return isNaN(t)?null:{line,dest,mode,t,rt:!isNaN(exp)};
+      }).filter(Boolean).sort((a,b)=>a.t-b.t).slice(0,4);
+      el.innerHTML=rows.length
+        ?rows.map(r=>{
+          const c=lc(r.line,r.mode);
+          const mins=Math.max(0,Math.round((r.t-now)/60000));
+          const soon=mins<=2;
+          return '<div class="fdep">'
+            +'<div class="fl"><div class="fln" style="background:'+c+'">'+esc(r.line)+'</div><span class="fdd">'+esc(r.dest)+'</span></div>'
+            +'<div class="fdm'+(soon?" soon":"")+'">'+mins+' <small>min</small></div>'
+            +'</div>';
+        }).join("")
+        :'<div style="padding:4px 6px;font-size:11px;color:var(--dim)">Pas de passage annoncé</div>';
+    }catch(e){el.innerHTML='<div style="padding:4px 6px;font-size:11px;color:var(--red)">Erreur API</div>';}
+  }
+}
+
+/* ── RECHERCHE ── */
+function bindSearch(){
+  const inp=document.getElementById("search-inp");
+  inp.addEventListener("input",e=>{
+    const q=e.target.value.trim().toLowerCase();
+    const res=document.getElementById("search-results");
+    if(q.length<2){
+      res.innerHTML='<div class="search-empty"><div class="se-ico"><svg viewBox="0 0 24 24" fill="none" stroke="#8c9ab5" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></div><h3>Cherche un arrêt</h3><p>Au moins 2 caractères pour démarrer la recherche.</p></div>';
+      return;
+    }
+    const hits=[];
+    St.stops.forEach(s=>{
+      if(s.name.toLowerCase().includes(q)) hits.push(s);
+    });
+    hits.sort((a,b)=>{
+      const ai=a.name.toLowerCase().indexOf(q), bi=b.name.toLowerCase().indexOf(q);
+      return ai-bi||a.name.localeCompare(b.name,"fr");
+    });
+    if(!hits.length){
+      res.innerHTML='<div class="search-empty"><div class="se-ico"><svg viewBox="0 0 24 24" fill="none" stroke="#8c9ab5" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></div><h3>Aucun résultat</h3><p>Essaie un autre nom d\'arrêt.</p></div>';
+      return;
+    }
+    res.innerHTML=hits.slice(0,40).map(s=>{
+      const linesH=s.lines.slice(0,5).map(l=>'<span class="lchip" style="background:'+lc(l,null)+';font-size:10px;padding:2px 7px">'+esc(l)+'</span>').join("");
+      return '<div class="sr-item" onclick="onSearchHit(\''+esc(s.ref)+'\')">'
+        +'<div class="sr-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="10" r="3"/><path d="M12 2a8 8 0 0 0-8 8c0 5 8 12 8 12s8-7 8-12a8 8 0 0 0-8-8z"/></svg></div>'
+        +'<div class="sr-meta"><b>'+esc(s.name)+'</b><span style="display:flex;gap:4px;flex-wrap:wrap;margin-top:3px">'+linesH+'</span></div>'
+        +'<svg class="sr-arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="16" height="16"><path d="m9 18 6-6-6-6"/></svg>'
+        +'</div>';
+    }).join("");
+  });
+}
+function onSearchHit(ref){
+  const s=St.stops.get(ref);
+  if(!s){toast("Arrêt introuvable");return;}
+  // Aller sur la carte ET ouvrir le modal
+  switchView("map");
+  St.map.setView([s.lat,s.lng],16);
+  openModal(s);
+  document.getElementById("search-inp").value="";
+}
+
+/* ── UI / STATUS ── */
+function setStatus(ok,sub){
+  const dot=document.getElementById("dot-status"),txt2=document.getElementById("txt-status");
+  dot.className="dot"+(ok?"":" err"); txt2.textContent=ok?"CTS Connectée":"Erreur";
+  St.apiOk=ok;
+  const big=document.getElementById("api-big-ico"),bl=document.getElementById("api-big-label"),bs=document.getElementById("api-big-sub");
+  big.className="api-big-icon"+(ok?"":" err");
+  bl.textContent=ok?"API CTS connectée":"Erreur de connexion";
+  bs.textContent=sub||"api.cts-strasbourg.eu";
+}
+
+/* ── COUNTDOWN ── */
+function startLoops(){
+  refreshVeh();
+  St.timer=setInterval(()=>{refreshVeh();St.cd=15;},15000);
+  St.tick=setInterval(()=>{
+    St.cd=Math.max(0,St.cd-1);
+    const f=St.cd/15;
+    document.getElementById("ring-fg").setAttribute("stroke-dashoffset",(81.7*(1-f)).toFixed(1));
+    document.getElementById("ring-n").textContent=Math.ceil(St.cd);
+  },1000);
+}
+
+/* ── FILTRES MAP ── */
+function bindFilters(){
+  document.querySelectorAll(".fchip").forEach(chip=>{
+    chip.addEventListener("click",()=>{
+      const l=chip.dataset.l;
+      chip.classList.toggle("on");
+      St.show[l]=chip.classList.contains("on");
+      if(l==="stops") drawStops();
+      if(l==="pr"){
+        if(St.show.pr){loadPR().then(()=>St.map.addLayer(St.lPr));}
+        else St.map.removeLayer(St.lPr);
+      }
+      if(l==="tram"||l==="bus") refreshVeh();
+    });
+  });
+}
+
+/* ── NAVIGATION ── */
+function switchView(id){
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+  document.querySelectorAll(".nbtab").forEach(t=>t.classList.remove("active"));
+  document.getElementById("view-"+id).classList.add("active");
+  document.querySelector('[data-view="'+id+'"]').classList.add("active");
+  St.curView=id;
+  if(id==="map") setTimeout(()=>St.map&&St.map.invalidateSize(),50);
+  if(id==="favs"){renderFavs();refreshFavsDeps();}
+}
+
+/* ── TOAST ── */
+let toastT;
+function toast(msg){
+  const t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");
+  clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("show"),2800);
+}
+
+/* ── BOOT ── */
+function boot(){
+  if(/COLLE-TON-URL/i.test(PROXY)||!PROXY||PROXY.length<10){
+    // Fallback : récupère depuis localStorage
+    try{const s=localStorage.getItem("sc_proxy");if(s&&s.length>10){window.PROXY=s;}}catch(e){}
+  }
+  if(/COLLE-TON-URL/i.test(PROXY)){
+    // Onboarding inline minimal — pas de plein écran, juste un overlay discret
+    document.body.insertAdjacentHTML("beforeend",`
+      <div id="ob" style="position:fixed;inset:0;background:rgba(8,11,18,.97);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;font-family:'Sora',sans-serif">
+        <div style="max-width:440px;width:100%;background:#0c1020;border:1px solid rgba(255,255,255,.15);border-radius:22px;padding:28px">
+          <div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#E2001A,#7a0010);display:grid;place-items:center;margin-bottom:16px">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/></svg>
+          </div>
+          <h2 style="margin:0 0 8px;font-size:21px;font-weight:900;color:#eaf0fa">STRASS'CITY</h2>
+          <p style="color:#8c9ab5;font-size:13px;line-height:1.55;margin:0 0 20px">Colle l'URL de ton <b style="color:#27d3ff">Cloudflare Worker</b> pour activer les données CTS en temps réel.</p>
+          <p style="color:#4a5568;font-size:12px;margin:0 0 12px">Déploie <code style="background:rgba(255,255,255,.07);padding:1px 6px;border-radius:5px;color:#27d3ff">cts-proxy-worker.js</code> sur <a href="https://dash.cloudflare.com/workers" target="_blank" style="color:#27d3ff">dash.cloudflare.com/workers</a></p>
+          <div style="display:flex;gap:8px">
+            <input id="ob-inp" placeholder="https://cts-proxy.xxx.workers.dev" autocomplete="off" style="flex:1;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.2);border-radius:12px;padding:12px 14px;color:#eaf0fa;font-size:13px;font-family:'JetBrains Mono',monospace;outline:none"/>
+            <button id="ob-go" style="background:linear-gradient(135deg,#E2001A,#9a0010);border:none;color:#fff;font-weight:700;padding:0 20px;border-radius:12px;cursor:pointer;font-size:14px">OK</button>
+          </div>
+        </div>
+      </div>`);
+    const go=()=>{
+      const v=document.getElementById("ob-inp").value.trim().replace(/\/+$/,"");
+      if(!/^https?:\/\//.test(v)){toast("URL invalide (doit commencer par https://)");return;}
+      window.PROXY=v;
+      try{localStorage.setItem("sc_proxy",v);}catch(e){}
+      document.getElementById("ob").remove();
+      mainBoot();
+    };
+    document.getElementById("ob-go").onclick=go;
+    document.getElementById("ob-inp").addEventListener("keydown",e=>{if(e.key==="Enter")go();});
+    return;
+  }
+  mainBoot();
+}
+function mainBoot(){
+  loadFavs(); updateFavBadge(); renderFavs();
+  initMap(); bindFilters(); bindSearch();
+  document.getElementById("m-close").onclick=closeModal;
+  document.getElementById("modal-bg").addEventListener("click",e=>{if(e.target.id==="modal-bg")closeModal();});
+  document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModal();});
+  document.querySelectorAll(".nbtab").forEach(t=>t.addEventListener("click",()=>switchView(t.dataset.view)));
+  document.getElementById("refresh-favs").onclick=()=>{renderFavs();refreshFavsDeps();};
+  loadStops().then(startLoops).catch(()=>{});
+}
+if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",boot);
+else boot();
+</script>
+</body>
+</html>
