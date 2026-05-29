@@ -1,0 +1,2925 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,viewport-fit=cover"/>
+<meta name="theme-color" content="#000000"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Strass&amp;Go"/>
+<link rel="manifest" href="manifest.json"/>
+<link rel="apple-touch-icon" href="icon-192.png"/>
+<title>Strass&amp;Go — Strasbourg en direct</title>
+
+<!-- ⚙️  CONFIG — LIGNE A MODIFIER AVEC TON URL CLOUDFLARE WORKER -->
+<script>
+const PROXY = "https://cts-proxy.strassweb67.workers.dev";
+// ex: "https://cts-proxy.bricejct.workers.dev"
+// Déploie cts-proxy-worker.js sur dash.cloudflare.com/workers puis colle l'URL ci-dessus.
+</script>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800;900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&family=Orbitron:wght@700;800;900&display=swap" rel="stylesheet"/>
+<style>
+/* ══════════════════════════════════════════
+   Strass&Go · single-file PWA
+   @ By Brice Jct · Alpha OS · Groupe Alpha Nex Strasbourg
+   Données : API CTS SIRI-lite (token via Cloudflare Worker)
+   ══════════════════════════════════════════ */
+:root{
+  /* ── Toile NOIR PROFOND façon Uber ── */
+  --bg:#000000; --bg2:#0b0c11; --bg3:#15171f;
+  /* ── VERRE DÉPOLI façon iOS (vibrancy / translucide) ── */
+  --glass:rgba(32,34,44,0.42); --glass2:rgba(14,15,20,0.68);
+  --border:rgba(255,255,255,0.085); --border2:rgba(255,255,255,0.16);
+  --hair:rgba(255,255,255,0.06);
+  /* surface "carte" frostée neutre (remplace l'ancien navy) */
+  --card:rgba(22,24,32,0.55); --card-bd:rgba(255,255,255,0.08);
+  --text:#f5f5f7; --muted:#9aa0ab; --dim:#5c616d;
+  --red:#E2001A; --cyan:#27d3ff; --green:#1fd99a; --amber:#ffb020; --pink:#ff3b7a;
+  --a-color:#E2001A; --a-glow:rgba(226,0,26,.40);
+  --navbar-h:92px;
+  --r:22px; --r-sm:14px;
+  --shadow:0 24px 64px rgba(0,0,0,.62);
+  --shadow-sm:0 8px 28px rgba(0,0,0,.42);
+  --f:'Inter',system-ui,-apple-system,sans-serif; --fd:'Sora',system-ui,sans-serif; --fm:'JetBrains Mono',monospace;
+  /* Trams officiel CTS — source : identité réseau (NE PAS MODIFIER) */
+  --tramA:#E2001A; --tramB:#009FE3; --tramC:#F39200;
+  --tramD:#50AF31; --tramE:#A04199; --tramF:#E5007D;
+  --bus:#4a5e80;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-font-smoothing:antialiased}
+html,body{height:100%;overflow:hidden;margin:0;background:var(--bg)}
+body{font-family:var(--f);color:var(--text);position:fixed;inset:0}
+
+/* ══ VUES ══ */
+.view{position:absolute;inset:0 0 var(--navbar-h) 0;display:none;flex-direction:column;overflow:hidden}
+.view.active{display:flex}
+
+/* ══ NAVBAR ══ */
+.navbar{
+  position:absolute;left:0;right:0;bottom:0;height:var(--navbar-h);z-index:2000;
+  background:var(--glass2);backdrop-filter:blur(34px) saturate(180%);-webkit-backdrop-filter:blur(34px) saturate(180%);
+  border-top:1px solid var(--hair);
+  box-shadow:0 -8px 40px rgba(0,0,0,.5);
+  display:flex;padding:0 4px;padding-bottom:env(safe-area-inset-bottom,0);
+}
+.nbtab{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:4px;padding:6px 4px;cursor:pointer;user-select:none;
+  transition:.18s;border-radius:14px;margin:4px 2px;position:relative;
+}
+.nbtab:active{background:rgba(255,255,255,.06)}
+.nbtab svg{width:22px;height:22px;stroke-width:2;transition:.2s;stroke:var(--muted);fill:none;stroke-linecap:round;stroke-linejoin:round}
+.nbtab span{font-size:10px;font-weight:600;color:var(--muted);letter-spacing:.2px;transition:.2s}
+.nbtab.active svg{stroke:var(--cyan);filter:drop-shadow(0 0 6px rgba(39,211,255,.7));transform:translateY(-1px) scale(1.06)}
+.nbtab.active span{color:var(--cyan)}
+.nbtab .badge{
+  position:absolute;top:5px;right:calc(50% - 14px);
+  min-width:16px;height:16px;border-radius:8px;
+  background:var(--red);color:#fff;font-size:9px;font-weight:700;font-family:var(--fm);
+  display:none;align-items:center;justify-content:center;padding:0 4px;
+  box-shadow:0 0 8px var(--a-glow);
+}
+.nbtab .badge.show{display:flex}
+.nbtab .ic{font-size:21px;line-height:1;filter:grayscale(.7) opacity(.55);transition:.22s;transform:translateZ(0)}
+.nbtab.active .ic{filter:grayscale(0) opacity(1) drop-shadow(0 0 9px rgba(39,211,255,.55));transform:scale(1.12) translateY(-1px)}
+.nbtab.active span{color:var(--cyan)}
+/* barre animée 3D qui glisse sous l'onglet actif */
+.nav-ind{position:absolute;top:5px;height:3px;width:20%;border-radius:3px;
+  background:linear-gradient(90deg,transparent,var(--cyan),#7af0ff,var(--cyan),transparent);
+  box-shadow:0 0 10px rgba(39,211,255,.55),0 0 20px rgba(39,211,255,.28);
+  transition:transform .42s cubic-bezier(.34,1.56,.64,1);pointer-events:none;z-index:3}
+.nav-ind::after{content:"";position:absolute;inset:0;border-radius:3px;background:inherit;filter:blur(4px);opacity:.8}
+
+/* ════ PAGE ACCUEIL ════ */
+.hclock{display:flex;align-items:center;gap:7px;font-family:var(--fm);font-size:13px;color:var(--cyan);
+  background:var(--glass);border:1px solid var(--border);padding:6px 11px;border-radius:11px;backdrop-filter:blur(10px)}
+.home-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:8px 14px 22px;background:var(--bg)}
+.home-search{background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:16px;margin-bottom:14px;box-shadow:var(--shadow-sm)}
+.hs-label{font-family:var(--fd);font-weight:800;font-size:14px;color:#eaf0fa;margin-bottom:10px}
+.home-search .search-inp{width:100%}
+.hs-help{font-size:12px;color:var(--muted);line-height:1.5;margin:10px 2px 0}
+.hs-help b{color:#cfe0f5}
+.home-results{margin-top:6px}
+.home-results .sr-item{margin-top:8px}
+.hcards{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.hcard{background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:15px;box-shadow:var(--shadow-sm);position:relative;overflow:hidden}
+.hcard::before{content:"";position:absolute;top:-40%;right:-30%;width:120px;height:120px;border-radius:50%;
+  background:radial-gradient(circle,rgba(39,211,255,.16),transparent 70%);pointer-events:none}
+.hc-top{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.hc-ico{font-size:24px;line-height:1}
+.hc-tag{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.hc-big{font-family:var(--fd);font-weight:900;font-size:34px;line-height:1;color:#fff;margin-bottom:4px}
+.hc-sub{font-size:12.5px;font-weight:700;margin-bottom:10px}
+.hc-row{display:flex;flex-wrap:wrap;gap:4px 12px;font-family:var(--fm);font-size:10.5px;color:var(--muted);border-top:1px dashed rgba(255,255,255,.1);padding-top:8px}
+.home-mini-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:14px;box-shadow:var(--shadow-sm)}
+.hmm-head{display:flex;align-items:center;justify-content:space-between;font-family:var(--fd);font-weight:800;font-size:13.5px;color:#eaf0fa;margin-bottom:11px}
+.hmm-live{display:flex;align-items:center;gap:6px;font-size:10px;letter-spacing:1px;color:var(--green)}
+.home-mini{height:230px;border-radius:16px;overflow:hidden;border:1px solid var(--border);background:#05060a;cursor:pointer}
+.hmm-open{margin-top:11px;width:100%;background:rgba(39,211,255,.12);border:1px solid rgba(39,211,255,.3);color:var(--cyan);
+  font-family:var(--fd);font-weight:700;font-size:13px;padding:11px;border-radius:13px;cursor:pointer;transition:.2s}
+.hmm-open:active{transform:scale(.98)}
+.home-foot{text-align:center;font-size:10px;color:rgba(255,255,255,.32);font-family:var(--fm);margin-top:16px}
+
+/* ════ HERO + RAFFINEMENTS UBER-STYLE (page Accueil) ════ */
+.home-hero{position:relative;overflow:hidden;margin-bottom:14px;padding:18px;
+  background:
+    radial-gradient(120% 80% at 85% -10%,rgba(39,211,255,.12),transparent 60%),
+    linear-gradient(180deg,rgba(20,22,30,.72),rgba(10,11,16,.78));
+  backdrop-filter:blur(24px) saturate(150%);-webkit-backdrop-filter:blur(24px) saturate(150%);
+  border:1px solid var(--border);border-radius:26px;
+  box-shadow:var(--shadow-sm),inset 0 1px 0 rgba(255,255,255,.06)}
+.hh-text{padding:2px 4px 14px}
+.hh-kicker{display:inline-flex;align-items:center;gap:8px;font-family:var(--fm);font-size:10px;font-weight:700;
+  letter-spacing:1.3px;color:var(--cyan);background:rgba(39,211,255,.10);border:1px solid rgba(39,211,255,.22);padding:5px 11px;border-radius:30px}
+.hh-kicker .livedot{width:7px;height:7px}
+.hh-title{font-family:var(--fd);font-weight:900;font-size:clamp(25px,7.4vw,33px);line-height:1.03;
+  letter-spacing:-.7px;color:#fff;margin:13px 0 9px;text-shadow:0 2px 18px rgba(0,0,0,.4)}
+.hh-sub{font-size:13.5px;line-height:1.5;color:var(--muted);max-width:34ch;margin:0}
+.hh-scene{border-radius:18px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.home-hint{padding:12px 6px 2px;font-size:12.5px;color:var(--muted);line-height:1.55}
+.home-hint b{color:#cfe0f5}
+/* surfaces & rayons homogènes — VERRE DÉPOLI iOS sur fond noir Uber */
+.home-search{border-radius:24px;padding:18px;background:var(--card);border-color:var(--card-bd);
+  backdrop-filter:blur(26px) saturate(160%);-webkit-backdrop-filter:blur(26px) saturate(160%)}
+.home-search .search-inp{padding:15px 16px 15px 46px;font-size:15px;border-radius:16px;background:rgba(255,255,255,.05)}
+.hs-label{font-size:13px;letter-spacing:.2px}
+.hcard{border-radius:24px;background:var(--card);border-color:var(--card-bd);
+  backdrop-filter:blur(26px) saturate(160%);-webkit-backdrop-filter:blur(26px) saturate(160%)}
+.home-mini-wrap{border-radius:24px;background:var(--card);border-color:var(--card-bd);
+  backdrop-filter:blur(26px) saturate(160%);-webkit-backdrop-filter:blur(26px) saturate(160%)}
+.home-mini{border-radius:18px}
+
+/* ══ TOPBAR / HEADER générique ══ */
+.topbar{
+  flex:0 0 auto;padding:14px 18px 12px;
+  display:flex;align-items:center;gap:12px;
+  background:var(--glass);backdrop-filter:blur(28px) saturate(160%);-webkit-backdrop-filter:blur(28px) saturate(160%);border-bottom:1px solid var(--hair);
+}
+.topbar h1{flex:1;margin:0;font-family:var(--fd);font-size:19px;font-weight:800;display:flex;align-items:center;gap:10px}
+.topbar h1 .accent{color:var(--cyan)}
+.brand{flex:0 1 auto!important;font-size:16px!important;font-weight:800;letter-spacing:-.3px;color:#fff;
+  text-shadow:0 1px 10px rgba(0,0,0,.6)}
+.brand .amp{color:var(--cyan);font-weight:900;margin:0 1px}
+.topbar .sub{font-size:11px;color:var(--muted);font-family:var(--fm)}
+
+/* ══ STATUS PILL ══ */
+.statpill{
+  display:flex;align-items:center;gap:8px;padding:6px 12px;
+  background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:20px;
+  font-size:11px;font-weight:600;cursor:default;
+}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:blink 2s infinite}
+.dot.err{background:var(--red);box-shadow:0 0 8px var(--red);animation:none}
+.dot.load{background:var(--amber);animation:blink .8s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ══ MAP VIEW ══ */
+#view-map{overflow:hidden}
+#map{flex:1;background:#000000}
+.leaflet-tile{filter:brightness(.72) contrast(1.12) saturate(.62) hue-rotate(-6deg)}
+.leaflet-container{background:#000000;font-family:var(--f)}
+.leaflet-control-zoom{display:none}
+.leaflet-control-attribution{background:rgba(0,0,0,.55)!important;color:var(--dim)!important;backdrop-filter:blur(8px);font-size:10px!important;border-radius:8px 0 0 0!important}
+.leaflet-control-attribution a{color:var(--muted)!important}
+
+/* map topbar override */
+#view-map .topbar{position:absolute;top:0;left:0;right:0;z-index:900;padding:10px 14px}
+#map{position:absolute;inset:0;z-index:1}
+
+/* filtres flottants */
+.map-filters{
+  position:absolute;bottom:12px;left:12px;right:12px;z-index:900;
+  display:flex;gap:8px;flex-wrap:wrap;pointer-events:auto;
+}
+.fchip{
+  display:flex;align-items:center;gap:7px;padding:8px 14px;
+  background:var(--glass);backdrop-filter:blur(14px);border:1.5px solid var(--border);
+  border-radius:20px;font-size:12.5px;font-weight:700;cursor:pointer;transition:.18s;
+  box-shadow:var(--shadow-sm);color:var(--muted);opacity:.55;
+}
+.fchip::before{content:"";width:15px;height:15px;border-radius:5px;border:2px solid currentColor;
+  display:inline-grid;place-items:center;font-size:10px;font-weight:900;line-height:1;flex:0 0 auto}
+.fchip.on{opacity:1;color:#eaf0fa;border-color:rgba(255,255,255,.35);background:rgba(255,255,255,.1)}
+.fchip.on::before{content:"✓";background:var(--cyan);border-color:var(--cyan);color:#06121a}
+.fchip:active{transform:scale(.95)}
+.fchip .dot2{width:9px;height:9px;border-radius:50%;background:var(--cyan);box-shadow:0 0 6px var(--cyan)}
+
+/* compteurs */
+.counters{
+  position:absolute;top:66px;right:12px;z-index:900;
+  display:flex;flex-direction:column;gap:6px;
+}
+.cntbox{
+  display:flex;align-items:center;gap:8px;padding:8px 12px;
+  background:var(--glass2);backdrop-filter:blur(14px);border:1px solid var(--border);
+  border-radius:12px;font-size:12px;box-shadow:var(--shadow-sm);
+}
+.cntbox b{font-family:var(--fd);font-size:17px;font-weight:800;color:var(--cyan);line-height:1}
+.cntbox span{color:var(--muted);font-size:11px}
+
+/* countdown ring */
+.ring{width:32px;height:32px;flex:0 0 auto;position:relative}
+.ring svg{transform:rotate(-90deg)}
+.ring .fg{stroke:var(--cyan);stroke-dasharray:83;transition:stroke-dashoffset .95s linear;filter:drop-shadow(0 0 3px rgba(39,211,255,.7))}
+.ring .bg{stroke:rgba(255,255,255,.10)}
+.ring .nt{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--fm);font-size:10px;color:var(--cyan)}
+.livebadge{display:flex;align-items:center;gap:7px;padding:7px 13px;background:rgba(31,217,154,.12);border:1px solid rgba(31,217,154,.35);border-radius:12px;font-family:var(--fd);font-weight:800;font-size:12px;letter-spacing:1px;color:var(--green);box-shadow:var(--shadow-sm)}
+.livedot{width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green);animation:livep 1.2s infinite}
+@keyframes livep{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
+
+/* ══ VÉHICULE MARKER ══ */
+.vm{
+  display:flex;align-items:center;gap:4px;padding:3px 8px 3px 3px;border-radius:22px;
+  font-weight:800;font-size:12px;color:#fff;font-family:var(--fd);white-space:nowrap;
+  border:1.5px solid rgba(255,255,255,.5);cursor:pointer;
+  box-shadow:0 4px 14px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.28);
+}
+.vm .ico{width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.25);display:grid;place-items:center;flex:0 0 auto}
+.vm .ico svg{width:11px;height:11px;stroke:#fff;stroke-width:2.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.vm.tram{border-radius:8px}
+.vm::after{content:"";position:absolute;inset:-6px;border-radius:28px;border:1.5px solid currentColor;opacity:0;animation:vring 2.6s ease-out infinite}
+@keyframes vring{0%{transform:scale(.6);opacity:.5}100%{transform:scale(1.6);opacity:0}}
+.vm.tram::after{border-radius:14px}
+.leaflet-marker-icon.vwrap{background:none!important;border:none!important}
+
+/* ══ VÉHICULE EMOJI (glissement fluide) ══ */
+.vwrap{transition:transform .5s linear}            /* glisse entre 2 ticks de 0,5s */
+.zooming .vwrap{transition:none!important}         /* pas de lag pendant le zoom */
+.vmoji{
+  display:flex;flex-direction:column;align-items:center;line-height:1;
+  transform:scale(var(--vscale,1));transform-origin:center bottom;
+  cursor:pointer;will-change:transform;pointer-events:auto;
+}
+.vmoji .vbus{width:34px;height:auto;display:block;filter:drop-shadow(0 3px 5px rgba(0,0,0,.6))}
+.vmoji .vln{
+  margin-top:-6px;font-family:var(--fd);font-weight:900;font-size:13px;color:#fff;
+  padding:1px 8px;border-radius:9px;border:2px solid rgba(255,255,255,.92);
+  box-shadow:0 2px 8px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.25);
+  white-space:nowrap;letter-spacing:.3px;text-shadow:0 1px 2px rgba(0,0,0,.55)}
+/* TRAM : étiquette lettre seule, pas de logo */
+.vtram{
+  transform:scale(var(--vscale,1));transform-origin:center;cursor:pointer;
+  font-family:var(--fd);font-weight:900;font-size:15px;color:#fff;
+  width:30px;height:23px;display:grid;place-items:center;border-radius:8px;
+  border:2px solid rgba(255,255,255,.92);box-shadow:0 3px 9px rgba(0,0,0,.6),0 0 12px rgba(226,0,26,.35);
+  letter-spacing:.5px;
+}
+
+/* ══ ARRÊT mignon (zoom proche) ══ */
+.stopcute{font-size:24px;line-height:1;transform:scale(var(--vscale,1));transform-origin:center bottom;filter:drop-shadow(0 2px 3px rgba(0,0,0,.5));cursor:pointer}
+
+/* stop dot */
+.sdot{cursor:pointer}
+
+/* ══ POPUP VÉHICULE ══ */
+.leaflet-popup-content-wrapper{background:var(--glass2);backdrop-filter:blur(16px);color:var(--text);border:1px solid var(--border2);border-radius:14px;box-shadow:var(--shadow)}
+.leaflet-popup-tip-container{display:none}
+.leaflet-popup-content{margin:12px 14px;font-family:var(--f)}
+.leaflet-popup-close-button{color:var(--muted)!important;font-size:18px!important;padding:5px 8px 0 0!important}
+.vph{display:flex;align-items:center;gap:9px;margin-bottom:8px}
+.vpb{font-family:var(--fd);font-weight:800;font-size:14px;color:#fff;padding:4px 10px;border-radius:8px;box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}
+.vpd{font-weight:600;font-size:13px}
+.vpt{font-family:var(--fd);font-weight:800;font-size:14px;color:#eaf0fa}
+.vpdir{font-size:12.5px;color:var(--muted);margin:-3px 0 7px;font-weight:600}
+.ontime{color:var(--green);font-weight:700}
+.late{color:var(--amber);font-weight:700}
+.vpr{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-top:1px dashed rgba(255,255,255,.1)}
+.vpr .k{color:var(--muted)}.vpr .v{font-family:var(--fm)}
+.vpest{margin-top:8px;font-size:10px;color:var(--amber);padding:6px 8px;background:rgba(255,176,32,.08);border-radius:8px;border:1px solid rgba(255,176,32,.25)}
+
+/* ══ SEARCH VIEW ══ */
+.search-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+.search-bar{
+  padding:12px 16px;background:var(--glass);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);
+}
+.search-inp{
+  width:100%;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);border-radius:14px;
+  padding:13px 16px 13px 44px;color:var(--text);font-family:var(--f);font-size:15px;outline:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%238c9ab5' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:14px center;
+}
+.search-inp:focus{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(39,211,255,.15)}
+.search-inp::placeholder{color:rgba(255,255,255,.72)}
+.search-results{flex:1;overflow-y:auto;padding:8px 12px}
+.search-results::-webkit-scrollbar{width:6px}.search-results::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:6px}
+.sr-item{
+  display:flex;align-items:center;gap:13px;padding:13px 14px;border-radius:14px;
+  cursor:pointer;transition:.15s;margin-bottom:4px;
+}
+.sr-item:hover,.sr-item:active{background:rgba(255,255,255,.06)}
+.sr-ico{width:38px;height:38px;border-radius:10px;background:rgba(39,211,255,.12);display:grid;place-items:center;flex:0 0 auto;font-size:19px}
+.sr-ico svg{stroke:var(--cyan);stroke-width:2;fill:none;stroke-linecap:round;width:18px;height:18px}
+.sr-meta{flex:1;min-width:0}
+.sr-meta b{display:block;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sr-meta span{font-size:11.5px;color:var(--muted);font-family:var(--fm)}
+.sr-arr{color:var(--dim)}
+.search-empty{padding:48px 24px;text-align:center;color:var(--muted)}
+.search-empty .se-ico{width:56px;height:56px;border-radius:18px;background:rgba(255,255,255,.05);display:grid;place-items:center;margin:0 auto 14px}
+.search-empty .se-ico svg{width:28px;height:28px;stroke:var(--muted);fill:none;stroke-width:1.5;stroke-linecap:round}
+.search-empty h3{margin:0 0 8px;font-family:var(--fd);font-size:16px}
+.search-empty p{margin:0;font-size:13px;line-height:1.55}
+
+/* ══ MODAL ARRÊT ══ */
+.modal-bg{
+  position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.55);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  display:none;align-items:flex-end;justify-content:center;
+}
+.modal-bg.show{display:flex;animation:fadein .2s}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+.modal{
+  width:100%;max-width:500px;max-height:85vh;margin-bottom:var(--navbar-h);
+  background:var(--glass2);backdrop-filter:blur(34px) saturate(170%);-webkit-backdrop-filter:blur(34px) saturate(170%);
+  border:1px solid var(--border2);border-radius:26px 26px 0 0;
+  box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column;
+  animation:slideup .28s cubic-bezier(.2,.9,.25,1);
+}
+@keyframes slideup{from{transform:translateY(50px);opacity:.4}to{transform:translateY(0);opacity:1}}
+.modal-h{
+  padding:20px 20px 16px;border-bottom:1px solid var(--border);flex:0 0 auto;position:relative;
+  background:linear-gradient(180deg,rgba(255,255,255,.04),transparent);
+}
+.modal-h .grab{width:40px;height:4px;border-radius:4px;background:rgba(255,255,255,.2);margin:0 auto 12px}
+.modal-h .ey{font-size:10px;letter-spacing:1.8px;text-transform:uppercase;color:var(--cyan);font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+.modal-h .ey .ref{background:rgba(39,211,255,.12);padding:2px 8px;border-radius:6px;font-family:var(--fm)}
+.modal-h h3{margin:0;font-family:var(--fd);font-size:21px;font-weight:800;padding-right:54px}
+.modal-h .lines-row{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}
+.lchip{display:inline-flex;align-items:center;padding:3px 9px;border-radius:8px;font-family:var(--fd);font-weight:800;font-size:12px;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}
+/* croix : sous le dessin (dans le header), bouton avec profondeur */
+.close-btn{
+  position:absolute;top:-22px;right:16px;width:44px;height:44px;border-radius:14px;z-index:5;
+  background:linear-gradient(180deg,#2c2f3a,#16181f);border:1px solid rgba(255,255,255,.16);cursor:pointer;
+  display:grid;place-items:center;color:#eaf0fa;font-size:24px;line-height:1;transition:.16s;
+  box-shadow:0 8px 20px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.22),inset 0 -2px 6px rgba(0,0,0,.4);
+}
+.close-btn:hover{background:linear-gradient(180deg,#ff5a5a,#c11a1a);border-color:#ff7a7a;transform:translateY(-1px)}
+.close-btn:active{transform:translateY(2px) scale(.95);box-shadow:0 3px 8px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.18)}
+/* bouton Partager : même langage de profondeur, à gauche de la croix */
+.share-btn{
+  position:absolute;top:-22px;right:70px;width:44px;height:44px;border-radius:14px;z-index:5;
+  background:linear-gradient(180deg,#2c2f3a,#16181f);border:1px solid rgba(255,255,255,.16);cursor:pointer;
+  display:grid;place-items:center;transition:.16s;
+  box-shadow:0 8px 20px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.22),inset 0 -2px 6px rgba(0,0,0,.4);
+}
+.share-btn svg{width:20px;height:20px;stroke:var(--cyan);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.share-btn:hover{background:linear-gradient(180deg,#27d3ff,#0f8fbf);border-color:#5fe0ff}
+.share-btn:hover svg{stroke:#06121a}
+.share-btn:active{transform:translateY(2px) scale(.95);box-shadow:0 3px 8px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.18)}
+.modal-body{flex:1;overflow-y:auto;padding-bottom:8px}
+.modal-body::-webkit-scrollbar{width:7px}.modal-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:6px}
+
+.dep{display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.05);cursor:default}
+.dep:hover{background:rgba(255,255,255,.025)}
+.dep .ln{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;flex:0 0 auto;font-family:var(--fd);font-weight:900;font-size:18px;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 3px 10px rgba(0,0,0,.5)}
+.dep .mid{flex:1;min-width:0}
+.dep .mid .dn{font-weight:600;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dep .mid .dm{display:flex;align-items:center;gap:7px;margin-top:3px;font-size:11.5px;color:var(--muted);flex-wrap:wrap}
+.dly{font-weight:700;font-family:var(--fm)}
+.dly.ok{color:var(--green)}
+.dly.bad{color:var(--amber)}
+.dbadge{font-size:9px;font-weight:700;letter-spacing:.5px;padding:2px 7px;border-radius:6px;text-transform:uppercase}
+.dbadge.rt{background:rgba(31,217,154,.15);color:var(--green)}
+.dbadge.th{background:rgba(140,152,173,.12);color:var(--muted)}
+.dep .right{text-align:right;flex:0 0 auto}
+.dep .right .mn{font-family:var(--fd);font-weight:900;font-size:22px;line-height:1;display:flex;align-items:baseline;gap:3px}
+.dep .right .mn.soon{color:var(--pink)}
+.dep .right .mn small{font-size:11px;font-weight:600;color:var(--muted)}
+.dep .right .hr{font-family:var(--fm);font-size:11px;color:var(--muted);margin-top:2px}
+.dep-load{padding:32px 20px;text-align:center;color:var(--muted);font-size:13px}
+.dep-load .sp{width:28px;height:28px;border-radius:50%;border:3px solid rgba(255,255,255,.12);border-top-color:var(--cyan);margin:0 auto 12px;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.dep-empty{padding:40px 20px;text-align:center;color:var(--muted);font-size:13px}
+.dep-fares{margin:8px 16px 4px;background:rgba(39,211,255,.05);border:1px solid rgba(39,211,255,.18);border-radius:14px;padding:12px 14px}
+.dep-fares .df-h{font-family:var(--fd);font-weight:800;font-size:13px;color:#eaf0fa;display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.dep-fares .df-h span{font-size:9px;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);background:rgba(255,255,255,.07);padding:2px 7px;border-radius:6px;font-family:var(--fm);font-weight:600}
+.dep-fares .df-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:5px 0;font-size:12.5px;color:var(--muted);border-top:1px solid rgba(255,255,255,.06)}
+.dep-fares .df-row:first-of-type{border-top:none}
+.dep-fares .df-row b{font-family:var(--fd);font-weight:800;color:#fff;font-size:13px;white-space:nowrap}
+.dep-fares .df-link{display:block;margin-top:9px;font-size:11.5px;color:var(--cyan);text-decoration:none;font-weight:600}
+.dep-refresh{text-align:center;padding:10px 20px 6px;font-size:11px;color:var(--dim)}
+
+/* ══ FAVORIS ══ */
+.fav-wrap{flex:1;overflow-y:auto;background:var(--bg)}
+.fav-wrap::-webkit-scrollbar{width:6px}.fav-wrap::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:6px}
+.fav-section{padding:10px 14px 6px}
+.fav-stitle{font-size:10px;letter-spacing:1.8px;text-transform:uppercase;color:var(--dim);font-weight:600;padding:0 2px 8px}
+.fav-empty{padding:60px 28px;text-align:center}
+.fav-empty .fe-ico{width:64px;height:64px;border-radius:20px;background:rgba(255,255,255,.04);display:grid;place-items:center;margin:0 auto 16px}
+.fav-empty .fe-ico svg{width:30px;height:30px;stroke:var(--muted);fill:none;stroke-width:1.5;stroke-linecap:round}
+.fav-empty h3{font-family:var(--fd);font-size:17px;margin:0 0 8px}
+.fav-empty p{font-size:13px;color:var(--muted);line-height:1.55;margin:0}
+.fav-card{
+  background:var(--glass);border:1px solid var(--border);border-radius:14px;
+  margin-bottom:10px;overflow:hidden;
+}
+.fav-card-h{
+  display:flex;align-items:center;gap:12px;padding:13px 15px;cursor:pointer;transition:.15s;
+}
+.fav-card-h:hover{background:rgba(255,255,255,.04)}
+.fav-card-h .fco{width:36px;height:36px;border-radius:10px;background:rgba(39,211,255,.12);display:grid;place-items:center;flex:0 0 auto}
+.fav-card-h .fco svg{stroke:var(--cyan);fill:none;stroke-width:2;stroke-linecap:round;width:18px;height:18px}
+.fav-card-h .fn{flex:1;font-weight:600;font-size:14px}
+.fav-card-h .fdel{color:var(--dim);font-size:20px;cursor:pointer;padding:4px;border-radius:8px;transition:.15s}
+.fav-card-h .fdel:hover{color:var(--red);background:rgba(226,0,26,.12)}
+.fav-card-h .fbell{flex:0 0 auto;width:34px;height:34px;border-radius:10px;display:grid;place-items:center;cursor:pointer;transition:.15s;background:rgba(255,255,255,.04)}
+.fav-card-h .fbell svg{width:18px;height:18px;stroke:var(--muted);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.fav-card-h .fbell:hover{background:rgba(255,214,10,.12)}
+.fav-card-h .fbell.on{background:rgba(255,214,10,.16)}
+.fav-card-h .fbell.on svg{stroke:#ffd60a;fill:rgba(255,214,10,.22);filter:drop-shadow(0 0 5px rgba(255,214,10,.5))}
+.fav-deps{padding:0 15px 10px;display:flex;flex-direction:column;gap:4px}
+.fdep{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-radius:10px;background:rgba(255,255,255,.03)}
+.fdep .fl{display:flex;align-items:center;gap:9px;min-width:0}
+.fdep .fln{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-family:var(--fd);font-weight:900;font-size:13px;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.25);flex:0 0 auto}
+.fdep .fdd{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px}
+.fdep .fdm{font-family:var(--fd);font-weight:800;font-size:15px;display:flex;align-items:baseline;gap:2px}
+.fdep .fdm.soon{color:var(--pink)}
+.fdep .fdm small{font-size:10px;color:var(--muted);font-weight:600}
+
+/* ══ INFO VIEW ══ */
+.info-wrap{flex:1;overflow-y:auto;background:var(--bg);padding:14px}
+.info-wrap::-webkit-scrollbar{width:6px}.info-wrap::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:6px}
+.info-card{background:var(--glass);border:1px solid var(--border);border-radius:14px;margin-bottom:12px;overflow:hidden}
+.info-card-h{padding:14px 16px 12px;border-bottom:1px solid var(--border)}
+.info-card-h .ict{font-size:10px;letter-spacing:1.6px;text-transform:uppercase;color:var(--dim);font-weight:600;margin-bottom:4px}
+.info-card-h .icn{font-family:var(--fd);font-size:15px;font-weight:700}
+.info-row{display:flex;justify-content:space-between;align-items:center;padding:11px 16px;border-bottom:1px solid rgba(255,255,255,.04);font-size:13px}
+.info-row:last-child{border-bottom:none}
+.info-row .k{color:var(--muted)}
+.info-row .v{font-family:var(--fm);font-size:12px;text-align:right;max-width:200px;overflow:hidden;text-overflow:ellipsis}
+.info-row .v.ok{color:var(--green)}.info-row .v.err{color:var(--red)}
+.api-status-big{
+  padding:18px 16px;display:flex;align-items:center;gap:14px;
+}
+.api-big-icon{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;flex:0 0 auto;background:rgba(31,217,154,.12)}
+.api-big-icon svg{stroke:var(--green);fill:none;stroke-width:2;stroke-linecap:round;width:24px;height:24px}
+.api-big-icon.err{background:rgba(226,0,26,.12)}.api-big-icon.err svg{stroke:var(--red)}
+.api-big-txt b{display:block;font-family:var(--fd);font-size:15px;font-weight:700}
+.api-big-txt span{font-size:12px;color:var(--muted)}
+
+.lines-grid{display:flex;flex-wrap:wrap;gap:8px;padding:14px 16px}
+.lg-item{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid var(--border);font-size:12.5px;font-weight:600;flex:1 0 auto}
+.lg-dot{width:14px;height:14px;border-radius:4px;flex:0 0 auto}
+
+.about-txt{padding:14px 16px;font-size:12.5px;color:var(--muted);line-height:1.6}
+.about-txt a{color:var(--cyan);text-decoration:none}
+.heart{color:var(--red);animation:beat 1.6s infinite;display:inline-block}
+@keyframes beat{0%,100%{transform:scale(1)}30%{transform:scale(1.25)}60%{transform:scale(.93)}}
+
+/* ══ TOAST ══ */
+.toast{
+  position:fixed;bottom:calc(var(--navbar-h) + 12px);left:50%;transform:translateX(-50%) translateY(12px);
+  z-index:5000;background:var(--glass2);border:1px solid var(--border2);border-radius:14px;
+  backdrop-filter:blur(20px) saturate(160%);-webkit-backdrop-filter:blur(20px) saturate(160%);
+  padding:10px 18px;font-size:13px;font-weight:500;box-shadow:var(--shadow);
+  opacity:0;transition:.22s;pointer-events:none;white-space:nowrap;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ════════ PAGE D'ACCUEIL (style CLORE.AI) ════════ */
+#landing{position:fixed;inset:0;z-index:5000;background:#050505;overflow:hidden;opacity:1;transition:opacity .6s ease}
+#landing.hide{opacity:0;pointer-events:none}
+.land-scroll{position:absolute;inset:0;z-index:2;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;
+  display:flex;flex-direction:column;padding-bottom:24px}
+.land-scroll::-webkit-scrollbar{width:6px}.land-scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:6px}
+.land-glow{position:absolute;top:-12%;left:50%;transform:translateX(-50%);
+  width:140vw;height:80vh;pointer-events:none;filter:blur(70px);opacity:.8;z-index:1;
+  background:
+    radial-gradient(36% 48% at 50% 40%, rgba(39,211,255,.55), transparent 70%),
+    radial-gradient(30% 42% at 36% 34%, rgba(80,160,255,.42), transparent 72%),
+    radial-gradient(32% 44% at 66% 42%, rgba(160,200,255,.30), transparent 72%),
+    radial-gradient(38% 48% at 50% 60%, rgba(226,0,26,.18), transparent 78%),
+    radial-gradient(24% 34% at 50% 30%, rgba(255,255,255,.42), transparent 72%);
+  animation:landdrift 13s ease-in-out infinite}
+@keyframes landdrift{0%,100%{transform:translateX(-50%) scale(1)}50%{transform:translateX(-50%) scale(1.08) translateY(10px)}}
+.land-nav{position:relative;z-index:2;display:flex;align-items:center;justify-content:space-between;padding:20px 22px}
+.land-logo{display:flex;align-items:center;gap:11px;font-family:var(--fd);font-weight:800;font-size:19px;letter-spacing:.5px;color:#fff}
+.land-mark{width:26px;height:26px;border-radius:50%;
+  background:conic-gradient(from 0deg,#fff,#888,#fff,#888,#fff);
+  -webkit-mask:radial-gradient(circle at 50% 50%, transparent 28%, #000 30%, #000 46%, transparent 48%),
+    conic-gradient(#000 0 0);-webkit-mask-composite:source-in;mask-composite:intersect;
+  animation:landspin 7s linear infinite}
+@keyframes landspin{to{transform:rotate(360deg)}}
+.land-burger{display:flex;flex-direction:column;gap:5px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);
+  width:50px;height:50px;border-radius:50%;align-items:center;justify-content:center;cursor:pointer;flex:0 0 auto}
+.land-burger span{width:18px;height:2px;background:#fff;border-radius:2px}
+.land-hero{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:6vh 26px 4vh}
+.land-badge{display:inline-block;font-family:var(--fm);font-size:11px;font-weight:700;letter-spacing:.6px;color:#fff;
+  background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);padding:7px 14px;border-radius:30px;margin-bottom:20px;
+  backdrop-filter:blur(8px);animation:landup .8s both}
+.land-title{font-family:var(--fd);font-weight:800;font-size:clamp(32px,8vw,62px);line-height:1.05;color:#fff;
+  margin:0 0 18px;letter-spacing:-.5px;text-shadow:0 2px 40px rgba(0,0,0,.5);animation:landup .8s .05s both}
+.land-sub{font-size:clamp(15px,4vw,20px);color:rgba(255,255,255,.82);max-width:620px;margin:0 0 30px;line-height:1.5;animation:landup .8s .15s both}
+.land-btn{display:inline-flex;align-items:center;gap:12px;background:#fff;color:#0a0a0a;border:none;
+  font-family:var(--fd);font-weight:800;font-size:18px;padding:16px 38px;border-radius:60px;cursor:pointer;
+  box-shadow:0 14px 44px rgba(0,0,0,.5);transition:transform .25s,box-shadow .25s;animation:landup .8s .25s both}
+.land-btn:hover{transform:translateY(-3px) scale(1.03);box-shadow:0 20px 60px rgba(39,211,255,.28)}
+.land-btn:active{transform:scale(.97)}
+.land-btn2{align-self:center;margin:4px 0 18px;animation:none}
+.land-rocket{font-size:20px}
+.land-foot{position:relative;z-index:2;text-align:center;padding:14px 0 8px;font-size:11px;color:rgba(255,255,255,.4);font-family:var(--fm)}
+/* cartes de présentation */
+.land-card{position:relative;z-index:2;margin:0 18px 16px;align-self:center;width:calc(100% - 36px);max-width:560px;
+  background:rgba(16,17,22,.7);border:1px solid rgba(255,255,255,.12);border-radius:22px;padding:15px;backdrop-filter:blur(14px);
+  box-shadow:0 18px 44px rgba(0,0,0,.45)}
+.ll-head{display:flex;align-items:center;justify-content:space-between;font-family:var(--fd);font-weight:800;font-size:13.5px;color:#eaf0fa;margin-bottom:11px}
+.land-map{height:210px;border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,.12);background:#05060a}
+.ll-cap{margin-top:11px;font-size:12px;color:rgba(255,255,255,.7);text-align:center}
+.ll-cap b{font-family:var(--fd);font-weight:900;color:var(--cyan);font-size:14px}
+.land-pitch{position:relative;z-index:2;margin:6px 22px 18px;align-self:center;max-width:600px;text-align:center}
+.land-pitch h2{font-family:var(--fd);font-weight:900;font-size:clamp(20px,5.2vw,26px);line-height:1.18;color:#fff;margin:0 0 12px;letter-spacing:-.3px}
+.land-pitch h2 .hl{color:var(--cyan)}
+.land-pitch p{font-size:14px;color:rgba(255,255,255,.78);line-height:1.6;margin:0}
+.land-pitch p b{color:#fff}
+.land-feats{position:relative;z-index:2;display:grid;grid-template-columns:1fr 1fr;gap:11px;margin:0 18px 18px;align-self:center;width:calc(100% - 36px);max-width:560px}
+.feat{background:rgba(16,17,22,.62);border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:15px 14px;display:flex;flex-direction:column;gap:4px}
+.feat .fic{font-size:24px;line-height:1;margin-bottom:4px}
+.feat b{font-family:var(--fd);font-weight:800;font-size:14px;color:#fff}
+.feat span{font-size:11.5px;color:rgba(255,255,255,.66);line-height:1.4}
+/* ── Carte d'installation PWA (bas de l'accueil) ── */
+.land-install{position:relative;z-index:2;margin:0 18px 16px;max-width:560px;align-self:center;width:calc(100% - 36px)}
+.li-card{display:flex;align-items:center;gap:13px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);
+  border-radius:20px;padding:14px 15px;backdrop-filter:blur(14px);box-shadow:0 18px 40px rgba(0,0,0,.45)}
+.li-ico{font-size:26px;line-height:1;flex:0 0 auto}
+.li-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.li-txt b{font-family:var(--fd);font-weight:800;font-size:14.5px;color:#fff}
+.li-txt span{font-size:11.5px;color:rgba(255,255,255,.7);line-height:1.4}
+.li-btn{flex:0 0 auto;background:#fff;color:#0a0a0a;border:none;font-family:var(--fd);font-weight:800;font-size:14px;
+  padding:11px 18px;border-radius:13px;cursor:pointer;box-shadow:0 8px 22px rgba(255,255,255,.18);transition:transform .15s}
+.li-btn:active{transform:scale(.96)}
+.li-steps{margin-top:10px;font-size:12px;color:rgba(255,255,255,.78);line-height:1.55;background:rgba(0,0,0,.25);
+  border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:12px 14px;display:none}
+.li-steps.show{display:block;animation:landup .4s both}
+.li-steps b{color:#fff}
+.li-use{margin-top:9px;font-size:11px;color:rgba(255,255,255,.55);line-height:1.5;text-align:center;padding:0 6px}
+@keyframes landup{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:translateY(0)}}
+
+/* ════════ FOND PAGE ACCUEIL (auto-suffisant · premium · zéro dépendance externe) ════════ */
+#view-home{background:
+  radial-gradient(90% 55% at 85% -8%,rgba(39,211,255,.10),transparent 62%),
+  radial-gradient(75% 50% at -8% 108%,rgba(226,0,26,.07),transparent 60%),
+  #000000}
+#view-home .home-scroll{background:transparent}
+#view-home .topbar{background:rgba(0,0,0,.45);backdrop-filter:blur(28px) saturate(160%);-webkit-backdrop-filter:blur(28px) saturate(160%)}
+
+/* ════════ ILLUSTRATION : BUS QUI ROULE (scène premium) ════════ */
+.busroad{position:relative;height:176px;border-radius:20px;overflow:hidden;isolation:isolate;
+  background:radial-gradient(120% 95% at 50% 6%,#15315c 0%,#0c1c3a 46%,#081427 100%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
+.busroad.banner{height:132px;border-radius:0}
+.br-sky-glow{position:absolute;inset:-18% 0 auto;height:120px;pointer-events:none;
+  background:radial-gradient(60% 100% at 50% 0,rgba(39,211,255,.30),transparent 70%)}
+.br-skyline{position:absolute;bottom:46px;left:0;width:200%;height:62px;opacity:.5;pointer-events:none;
+  background:repeating-linear-gradient(90deg,
+     rgba(255,255,255,.05) 0 10px,transparent 10px 14px,
+     rgba(255,255,255,.08) 14px 22px,transparent 22px 31px,
+     rgba(255,255,255,.04) 31px 45px,transparent 45px 58px);
+  -webkit-mask:linear-gradient(180deg,transparent,#000 62%);mask:linear-gradient(180deg,transparent,#000 62%);
+  animation:brskyline 16s linear infinite}
+@keyframes brskyline{to{transform:translateX(-50%)}}
+.br-speed{position:absolute;left:0;right:0;top:56px;height:44px;pointer-events:none}
+.br-speed i{position:absolute;height:3px;border-radius:3px;left:-30%;
+  background:linear-gradient(90deg,transparent,rgba(126,240,255,.9),transparent);animation:brspeed 1.1s linear infinite}
+.br-speed i:nth-child(1){top:4px;width:70px;animation-delay:0s}
+.br-speed i:nth-child(2){top:18px;width:52px;animation-delay:.4s;opacity:.8}
+.br-speed i:nth-child(3){top:32px;width:86px;animation-delay:.7s;opacity:.6}
+@keyframes brspeed{0%{left:-30%}100%{left:120%}}
+.br-road{position:absolute;left:0;right:0;bottom:0;height:46px;background:linear-gradient(180deg,#1b212c 0%,#0e131b 100%)}
+.br-edge{position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.18),transparent)}
+.br-dash{position:absolute;top:20px;left:0;width:200%;height:4px;border-radius:3px;opacity:.9;
+  background:repeating-linear-gradient(90deg,#ffd60a 0 26px,transparent 26px 54px);animation:brdash .55s linear infinite}
+@keyframes brdash{to{transform:translateX(-54px)}}
+.br-bus{position:absolute;bottom:24px;left:50%;width:150px;margin-left:-75px;
+  animation:brbob 2.4s ease-in-out infinite;filter:drop-shadow(0 10px 14px rgba(0,0,0,.45))}
+.br-bus svg{width:150px;height:auto;display:block}
+@keyframes brbob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+.br-wheel{transform-box:fill-box;transform-origin:center;animation:brspin .5s linear infinite}
+@keyframes brspin{to{transform:rotate(360deg)}}
+.br-cap{position:absolute;top:13px;left:0;right:0;text-align:center;font-family:var(--fd);font-weight:800;z-index:3;
+  font-size:13px;color:rgba(255,255,255,.95);letter-spacing:.2px;text-shadow:0 2px 10px rgba(0,0,0,.5)}
+
+
+/* ════════ ILLUSTRATION : ARRÊT DE BUS (bannière modal) ════════ */
+.busstop{position:relative;height:120px;overflow:hidden;
+  background:linear-gradient(180deg,#23395c,#2d4f72 70%,#356084)}
+.bs-sun{position:absolute;top:14px;right:26px;width:34px;height:34px;border-radius:50%;
+  background:radial-gradient(circle,#ffe27a,#ffb020);box-shadow:0 0 26px rgba(255,200,60,.7);animation:bspulse 3s ease-in-out infinite}
+@keyframes bspulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+.bs-ground{position:absolute;bottom:0;left:0;right:0;height:34px;background:linear-gradient(180deg,#2a3242,#1a2230)}
+.bs-shelter{position:absolute;bottom:30px;right:22px}
+.bs-shelter svg{width:96px;height:auto;filter:drop-shadow(0 6px 8px rgba(0,0,0,.45))}
+.bs-bus{position:absolute;bottom:30px;left:-90px;width:84px;animation:bsdrive 5.5s cubic-bezier(.5,0,.5,1) infinite}
+@keyframes bsdrive{0%{left:-90px}55%{left:42%}60%{left:42%}100%{left:120%}}
+.bs-bus svg{width:84px;height:auto;filter:drop-shadow(0 6px 8px rgba(0,0,0,.45))}
+
+/* ════════ SKELETON ════════ */
+.skel{display:flex;align-items:center;gap:12px;padding:12px 4px;border-radius:14px;margin-top:8px}
+.skel .b{background:linear-gradient(90deg,rgba(255,255,255,.05) 25%,rgba(255,255,255,.12) 50%,rgba(255,255,255,.05) 75%);
+  background-size:200% 100%;border-radius:10px;animation:shimmer 1.2s linear infinite}
+@keyframes shimmer{to{background-position:-200% 0}}
+.skel .s1{width:42px;height:42px;border-radius:12px;flex:0 0 auto}
+.skel .s2{height:13px;flex:1;border-radius:7px}
+.skel .s3{width:60px;height:13px;border-radius:7px}
+
+/* ════════ MODAL : compacte, haut TOUJOURS visible, sans scroll forcé ════════ */
+.modal{max-height:84vh}                          /* ne touche jamais le haut de l'écran */
+.modal-illu{flex:0 0 auto}
+.modal-illu .busroad.banner{height:104px}        /* bannière bus plus basse */
+.modal-illu .busstop{height:100px}
+.modal-h{padding:11px 20px 12px}
+.modal-h .grab{margin:0 auto 9px}
+.modal-h h3{font-size:19px}
+.modal-h .ey{margin-bottom:4px}
+.dep{padding:10px 20px}
+/* fiche VÉHICULE détaillée */
+.vd-grid{padding:6px 20px 14px}
+.vd-row{display:flex;justify-content:space-between;gap:14px;padding:8px 0;border-top:1px solid rgba(255,255,255,.07);font-size:12.5px}
+.vd-row:first-child{border-top:none}
+.vd-row .k{color:var(--muted);font-weight:600;flex:0 0 auto}
+.vd-row .v{font-family:var(--fm);color:#eaf0fa;text-align:right;font-size:12.5px}
+.vd-big{display:flex;align-items:center;gap:12px;padding:14px 20px 6px}
+.vd-big .lnbadge{font-family:var(--fd);font-weight:900;font-size:20px;color:#fff;min-width:46px;height:40px;padding:0 10px;
+  display:grid;place-items:center;border-radius:11px;box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 4px 12px rgba(0,0,0,.4)}
+.vd-big .vdt{font-family:var(--fd);font-weight:800;font-size:17px;color:#fff}
+.vd-big .vds{font-size:12px;color:var(--muted)}
+
+/* ════════ FORMULAIRE COMPTE ════════ */
+.acc-wrap{flex:1;overflow-y:auto;padding:16px 16px 30px;background:var(--bg)}
+.acc-card{background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:20px;box-shadow:var(--shadow-sm);margin-bottom:14px}
+.acc-ava{width:74px;height:74px;border-radius:50%;margin:0 auto 12px;display:grid;place-items:center;font-size:34px;
+  background:linear-gradient(135deg,#27d3ff,#1f6dff);box-shadow:0 8px 24px rgba(39,211,255,.35)}
+.acc-name{text-align:center;font-family:var(--fd);font-weight:800;font-size:18px;color:#fff;margin-bottom:2px}
+.acc-mail{text-align:center;font-size:12.5px;color:var(--muted);margin-bottom:6px}
+.acc-field{margin-bottom:13px}
+.acc-field label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-weight:700;margin-bottom:6px}
+.acc-field input{width:100%;background:rgba(255,255,255,.05);border:1.5px solid var(--border);border-radius:12px;
+  padding:13px 14px;color:#eaf0fa;font-size:14px;font-family:var(--f);outline:none;transition:.15s}
+.acc-field input:focus{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(39,211,255,.15)}
+.acc-save{width:100%;background:linear-gradient(135deg,#27d3ff,#1f6dff);border:none;color:#04121e;font-family:var(--fd);
+  font-weight:800;font-size:15px;padding:15px;border-radius:14px;cursor:pointer;transition:.2s;box-shadow:0 10px 28px rgba(39,211,255,.3)}
+.acc-save:active{transform:scale(.98)}
+.acc-soon{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted);background:rgba(31,217,154,.07);
+  border:1px solid rgba(31,217,154,.2);border-radius:12px;padding:12px 14px;margin-top:4px}
+.acc-soon b{color:var(--green)}
+/* ════════ OVERLAY DÉTAIL (Météo / Qualité de l'air) ════════ */
+.hcard-tap{cursor:pointer;transition:transform .15s,box-shadow .15s}
+.hcard-tap:active{transform:scale(.98)}
+.hcard-tap::after{content:"›";position:absolute;top:13px;right:15px;font-size:20px;color:var(--muted);font-family:var(--fd);line-height:1}
+.detail-bg{position:fixed;inset:0;z-index:4000;background:rgba(0,0,0,.6);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  display:none;align-items:flex-end;justify-content:center}
+.detail-bg.show{display:flex;animation:fadein .2s}
+.detail-panel{width:100%;max-width:560px;max-height:92vh;margin-bottom:0;display:flex;flex-direction:column;
+  background:linear-gradient(180deg,#101218,#070809);border:1px solid var(--border2);border-radius:24px 24px 0 0;
+  box-shadow:0 -10px 50px rgba(0,0,0,.6);overflow:hidden;animation:slideup .3s cubic-bezier(.2,.9,.25,1)}
+.detail-head{position:relative;flex:0 0 auto;padding:16px 20px 14px;border-bottom:1px solid var(--border);overflow:hidden}
+.detail-head .dh-grab{width:42px;height:4px;border-radius:4px;background:rgba(255,255,255,.22);margin:0 auto 12px}
+.dh-eyebrow{font-size:10px;letter-spacing:1.8px;text-transform:uppercase;color:var(--cyan);font-weight:700;margin-bottom:5px}
+.detail-head h2{margin:0;font-family:var(--fd);font-weight:900;font-size:23px;color:#fff;padding-right:54px}
+.detail-close{position:absolute;top:8px;right:16px;width:44px;height:44px;border-radius:14px;z-index:5;
+  background:linear-gradient(180deg,#2c2f3a,#16181f);border:1px solid rgba(255,255,255,.16);cursor:pointer;
+  display:grid;place-items:center;color:#eaf0fa;font-size:24px;transition:.16s;
+  box-shadow:0 8px 20px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.22),inset 0 -2px 6px rgba(0,0,0,.4)}
+.detail-close:hover{background:linear-gradient(180deg,#ff5a5a,#c11a1a);border-color:#ff7a7a}
+.detail-close:active{transform:translateY(2px) scale(.95)}
+.detail-body{flex:1;overflow-y:auto;padding:16px 16px 28px}
+.detail-body::-webkit-scrollbar{width:7px}.detail-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:6px}
+/* héros météo */
+.wx-hero{position:relative;border-radius:20px;overflow:hidden;padding:22px 18px;margin-bottom:14px;
+  background:linear-gradient(160deg,#1b4a7a,#0c2440);border:1px solid var(--border)}
+.wx-hero .wxh-ico{font-size:58px;line-height:1;filter:drop-shadow(0 6px 14px rgba(0,0,0,.4))}
+.wx-hero .wxh-temp{font-family:var(--fd);font-weight:900;font-size:62px;line-height:1;color:#fff;margin:6px 0 2px}
+.wx-hero .wxh-desc{font-size:15px;font-weight:700;color:#dbe9fb}
+.wx-hero .wxh-sun{position:absolute;top:-30px;right:-30px;width:130px;height:130px;border-radius:50%;
+  background:radial-gradient(circle,rgba(255,210,90,.5),transparent 70%);animation:bspulse 4s ease-in-out infinite}
+.wx-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.wx-cell{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:13px 14px}
+.wx-cell .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:6px}
+.wx-cell .v{font-family:var(--fd);font-weight:800;font-size:21px;color:#fff;margin-top:5px}
+.wx-cell .v small{font-size:12px;color:var(--muted);font-weight:600}
+.wx-sect{font-family:var(--fd);font-weight:800;font-size:13px;color:#eaf0fa;margin:6px 2px 9px;display:flex;align-items:center;gap:7px}
+.wx-hours{display:flex;gap:8px;overflow-x:auto;padding-bottom:8px;margin-bottom:8px}
+.wx-hours::-webkit-scrollbar{height:5px}.wx-hours::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:6px}
+.wx-h{flex:0 0 auto;width:62px;background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:10px 0;text-align:center}
+.wx-h .hh{font-family:var(--fm);font-size:11px;color:var(--muted)}
+.wx-h .hi{font-size:22px;line-height:1;margin:5px 0}
+.wx-h .ht{font-family:var(--fd);font-weight:800;font-size:14px;color:#fff}
+.wx-h .hp{font-size:9.5px;color:var(--cyan);margin-top:2px}
+/* gauge AQI */
+.aq-hero{display:flex;align-items:center;gap:18px;border-radius:20px;padding:20px 18px;margin-bottom:14px;
+  background:linear-gradient(160deg,#16243c,#0a1424);border:1px solid var(--border)}
+.aq-gauge{position:relative;width:120px;height:120px;flex:0 0 auto}
+.aq-gauge svg{transform:rotate(-90deg)}
+.aq-gauge .nums{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.aq-gauge .nums b{font-family:var(--fd);font-weight:900;font-size:34px;line-height:1;color:#fff}
+.aq-gauge .nums span{font-size:9px;letter-spacing:1px;color:var(--muted);text-transform:uppercase}
+.aq-hero .aqh-txt b{font-family:var(--fd);font-weight:900;font-size:22px;display:block}
+.aq-hero .aqh-txt span{font-size:12.5px;color:var(--muted);line-height:1.5;display:block;margin-top:6px}
+.aq-pollutants{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.aq-p{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:13px 14px;position:relative;overflow:hidden}
+.aq-p .pn{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.aq-p .pv{font-family:var(--fd);font-weight:800;font-size:20px;color:#fff;margin-top:4px}
+.aq-p .pv small{font-size:11px;color:var(--muted);font-weight:600}
+.aq-p .pbar{height:5px;border-radius:4px;background:rgba(255,255,255,.08);margin-top:9px;overflow:hidden}
+.aq-p .pbar i{display:block;height:100%;border-radius:4px;animation:pbarin .8s cubic-bezier(.2,.9,.25,1) both}
+@keyframes pbarin{from{width:0}}
+.dt-note{font-size:11px;color:var(--muted);line-height:1.55;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:12px;padding:11px 13px;margin-top:6px}
+.dt-note a{color:var(--cyan);text-decoration:none}
+.dt-load{padding:40px 20px;text-align:center;color:var(--muted);font-size:13px}
+.dt-load .sp{width:28px;height:28px;border-radius:50%;border:3px solid rgba(255,255,255,.12);border-top-color:var(--cyan);margin:0 auto 12px;animation:spin 1s linear infinite}
+/* ════════ FENÊTRE INSTALLATION PWA ════════ */
+.pwa-modal{position:fixed;inset:0;z-index:6000;background:rgba(0,0,0,.66);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  display:none;align-items:center;justify-content:center;padding:24px}
+.pwa-modal.show{display:flex;animation:fadein .2s}
+.pm-card{position:relative;width:100%;max-width:430px;background:linear-gradient(180deg,#14161d,#0a0b10);
+  border:1px solid var(--border2);border-radius:24px;padding:26px 22px 22px;text-align:center;
+  box-shadow:0 30px 70px rgba(0,0,0,.6);animation:slideup .3s cubic-bezier(.2,.9,.25,1)}
+.pm-close{position:absolute;top:14px;right:14px;width:42px;height:42px;border-radius:13px;cursor:pointer;
+  background:linear-gradient(180deg,#2c2f3a,#16181f);border:1px solid rgba(255,255,255,.16);
+  display:grid;place-items:center;color:#eaf0fa;font-size:23px;transition:.16s;
+  box-shadow:0 6px 16px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.22)}
+.pm-close:hover{background:linear-gradient(180deg,#ff5a5a,#c11a1a);border-color:#ff7a7a}
+.pm-close:active{transform:translateY(2px) scale(.95)}
+.pm-ico{font-size:46px;line-height:1;margin-bottom:6px}
+.pm-card h3{margin:0 0 8px;font-family:var(--fd);font-weight:900;font-size:21px;color:#fff}
+.pm-lead{font-size:13px;color:var(--muted);line-height:1.55;margin:0 0 18px}
+.pm-steps{text-align:left;display:flex;flex-direction:column;gap:10px;margin-bottom:16px}
+.pm-step{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.04);border:1px solid var(--border);
+  border-radius:14px;padding:12px 14px;font-size:13.5px;color:#dbe6f5;line-height:1.4}
+.pm-step b{color:#fff}
+.pm-n{flex:0 0 auto;width:26px;height:26px;border-radius:50%;background:var(--cyan);color:#06121a;
+  font-family:var(--fd);font-weight:900;font-size:13px;display:grid;place-items:center}
+.pm-warn{font-size:12.5px;color:#ffd60a;background:rgba(255,214,10,.08);border:1px solid rgba(255,214,10,.25);
+  border-radius:12px;padding:11px 13px;margin-bottom:6px;line-height:1.45}
+.pm-foot{font-size:11.5px;color:var(--dim);line-height:1.5}
+
+/* ═══════════════════════════════════════════════════════════════
+   ✦ REFONTE ACCUEIL « STITCH »  —  @ By Brice Jct · Alpha OS
+   (design only · aucun id/handler/logique modifié)
+   ═══════════════════════════════════════════════════════════════ */
+@keyframes neonspin{to{transform:rotate(360deg)}}
+
+/* ambiance accueil (halos teal/cyan de la maquette) */
+#view-home{background:
+  radial-gradient(72% 42% at 10% 2%, rgba(31,217,154,.12), transparent 60%),
+  radial-gradient(78% 50% at 94% -2%, rgba(39,211,255,.12), transparent 60%),
+  radial-gradient(60% 45% at 100% 102%, rgba(31,217,154,.07), transparent 60%),
+  #000 !important}
+#view-home .home-scroll{padding:16px 16px 26px}
+
+/* ─── HEADER : CTS Connecté + EKG  /  STRASS&GO chrome ─── */
+.hx-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:4px 2px 18px}
+.hx-cts{display:flex;align-items:center;gap:9px}
+.hx-bar{width:4px;height:34px;border-radius:4px;background:linear-gradient(180deg,#39ffa8,#0bbf6e);
+  box-shadow:0 0 12px rgba(31,217,154,.8),0 0 24px rgba(31,217,154,.4);animation:ctsbar 2.4s ease-in-out infinite}
+@keyframes ctsbar{0%,100%{opacity:1;transform:scaleY(1)}50%{opacity:.5;transform:scaleY(.82)}}
+.hx-cts-txt{display:flex;flex-direction:column;line-height:1.06}
+.hx-cts-txt b{font-family:var(--fd);font-weight:800;font-size:14px;color:#f5f5f7;letter-spacing:.3px}
+.hx-cts-txt span{font-size:12px;color:var(--muted)}
+.hx-ekg{width:48px;height:26px;overflow:visible;flex:0 0 auto}
+.hx-ekg .ekg-base{stroke:rgba(31,217,154,.22);stroke-width:2}
+.hx-ekg .ekg-run{stroke:#3affb0;stroke-width:2.4;filter:drop-shadow(0 0 4px rgba(57,255,176,.9));
+  stroke-dasharray:22 150;stroke-dashoffset:172;animation:ekgrun 2.1s linear infinite}
+@keyframes ekgrun{to{stroke-dashoffset:0}}
+
+/* logo chrome métallique 3D + reflet animé */
+.hx-logo.chrome{font-family:'Orbitron',var(--fd),sans-serif;font-weight:800;
+  font-size:clamp(23px,7vw,32px);letter-spacing:.5px;line-height:1;white-space:nowrap;
+  background:linear-gradient(180deg,#ffffff 0%,#cdd6e4 20%,#828b9d 42%,#ffffff 52%,#aab3c4 64%,#6f7889 82%,#dbe2ec 100%);
+  background-size:100% 240%;-webkit-background-clip:text;background-clip:text;
+  -webkit-text-fill-color:transparent;color:transparent;-webkit-text-stroke:.5px rgba(0,0,0,.32);
+  filter:drop-shadow(0 1px 0 rgba(255,255,255,.35)) drop-shadow(0 3px 7px rgba(0,0,0,.6));
+  animation:chromeflow 6s ease-in-out infinite}
+@keyframes chromeflow{0%,100%{background-position:0 0}50%{background-position:0 100%}}
+
+/* ─── BARRE DE RECHERCHE (verre + glow doux) ─── */
+.hx-search{position:relative;margin:0 0 6px;border-radius:20px;
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);
+  backdrop-filter:blur(22px) saturate(160%);-webkit-backdrop-filter:blur(22px) saturate(160%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 10px 30px rgba(0,0,0,.45),0 0 22px rgba(39,211,255,.06);
+  transition:border-color .18s, box-shadow .18s}
+.hx-srch-ic{position:absolute;left:18px;top:50%;transform:translateY(-50%);width:20px;height:20px;
+  stroke:var(--muted);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+.hx-inp{width:100%;background:transparent !important;background-image:none !important;border:none !important;
+  border-radius:20px;padding:16px 16px 16px 47px;color:var(--text);font-family:var(--f);font-size:13.5px;outline:none;box-shadow:none !important;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hx-inp::placeholder{color:var(--muted);opacity:.9}
+.hx-search:focus-within{border-color:rgba(39,211,255,.5);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 0 0 3px rgba(39,211,255,.14),0 10px 30px rgba(0,0,0,.45)}
+#view-home #home-results{margin:4px 0 0}
+
+/* ─── CARTES À CONTOUR LUMINEUX ANIMÉ ─── */
+.hx-cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:14px 0 22px}
+.hx-card{position:relative;z-index:0;border-radius:22px;cursor:pointer;overflow:visible;
+  background:linear-gradient(165deg,#101218 0%,#0a0c11 100%);transition:transform .15s}
+.hx-card:active{transform:scale(.975)}
+.hx-card.wx{border:1px solid rgba(52,168,255,.32);box-shadow:0 16px 40px rgba(0,0,0,.5),0 0 22px rgba(39,168,255,.16),0 0 44px rgba(10,92,255,.09);animation:hbblue 4.6s ease-in-out infinite}
+.hx-card.air{border:1px solid rgba(39,224,160,.32);box-shadow:0 16px 40px rgba(0,0,0,.5),0 0 22px rgba(39,224,160,.16),0 0 44px rgba(10,158,99,.09);animation:hbgreen 5.1s ease-in-out infinite}
+@keyframes hbblue{0%,100%{box-shadow:0 16px 40px rgba(0,0,0,.5),0 0 18px rgba(39,168,255,.13),0 0 38px rgba(10,92,255,.07)}50%{box-shadow:0 16px 40px rgba(0,0,0,.5),0 0 30px rgba(39,168,255,.26),0 0 58px rgba(10,92,255,.14)}}
+@keyframes hbgreen{0%,100%{box-shadow:0 16px 40px rgba(0,0,0,.5),0 0 18px rgba(39,224,160,.13),0 0 38px rgba(10,158,99,.07)}50%{box-shadow:0 16px 40px rgba(0,0,0,.5),0 0 30px rgba(39,224,160,.26),0 0 58px rgba(10,158,99,.14)}}
+.hx-card-in{position:relative;z-index:2;padding:16px 15px 15px}
+.hx-lbl{font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.hx-card-mid{display:flex;align-items:flex-start;justify-content:space-between;gap:6px}
+.hx-big{font-family:var(--fd);font-weight:900;font-size:40px;line-height:.92;color:#fff;letter-spacing:-1px}
+.hx-ico{font-size:30px;line-height:1;filter:drop-shadow(0 4px 8px rgba(0,0,0,.5))}
+.hx-desc{font-size:13.5px;font-weight:700;color:#dfe7f2;margin-top:9px}
+.hx-sub{margin-top:6px;font-family:var(--fm);font-size:10.5px;color:var(--muted);display:flex;flex-wrap:wrap;gap:3px 8px}
+/* anneau lumineux qui tourne autour de la carte (compatible tous navigateurs) */
+.hx-card .nf{position:absolute;inset:0;border-radius:inherit;z-index:1;pointer-events:none;overflow:hidden;padding:1.6px;
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude}
+.hx-card .nf::before{content:"";position:absolute;inset:-60%;
+  background:conic-gradient(from 0deg,transparent 0 42%,var(--c1) 58%,#ffffff 70%,var(--c2) 82%,transparent 100%);
+  animation:neonspin var(--spd,6s) linear infinite}
+
+/* ─── TITRE SECTION + CARTE MAP LIVE ─── */
+.hx-sectitle{font-family:var(--fd);font-weight:900;font-size:22px;color:#fff;letter-spacing:-.4px;margin:2px 2px 12px}
+.hx-mapcard{position:relative;border-radius:22px;padding:8px;background:var(--card);border:1px solid var(--card-bd);
+  backdrop-filter:blur(22px) saturate(150%);-webkit-backdrop-filter:blur(22px) saturate(150%);
+  box-shadow:0 18px 44px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.05)}
+.hx-mapcard .home-mini{height:300px;border-radius:16px;overflow:hidden}
+.hx-live{position:absolute;top:18px;right:18px;z-index:1200;display:flex;align-items:center;gap:7px;
+  padding:6px 12px;border-radius:20px;background:rgba(0,0,0,.55);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  border:1px solid rgba(255,255,255,.14);font-family:var(--fd);font-weight:800;font-size:11px;letter-spacing:1px;color:#fff}
+.hx-live-dot{width:8px;height:8px;border-radius:50%;background:#ff3b3b;box-shadow:0 0 10px #ff3b3b;animation:livepulse 1.2s infinite}
+@keyframes livepulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.8)}}
+.hx-mapcard .hmm-open{margin-top:8px}
+
+/* ─── CONTENEUR INGÉNIEUR BRICE ─── */
+.hx-brice{position:relative;z-index:0;margin-top:20px;border-radius:22px;overflow:hidden;
+  background:linear-gradient(165deg,rgba(18,20,28,.92),rgba(9,10,15,.96));
+  border:1px solid rgba(255,255,255,.08);box-shadow:0 16px 40px rgba(0,0,0,.5)}
+.hx-brice::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:linear-gradient(120deg,transparent 38%,rgba(39,211,255,.06),transparent 68%)}
+.hxb-top{position:relative;display:flex;align-items:center;gap:13px;padding:16px 16px 6px}
+.hxb-ava{width:48px;height:48px;border-radius:14px;flex:0 0 auto;display:grid;place-items:center;font-size:25px;
+  background:linear-gradient(135deg,#27d3ff,#1f6dff);box-shadow:0 8px 22px rgba(39,211,255,.35),inset 0 1px 0 rgba(255,255,255,.3)}
+.hxb-id b{display:block;font-family:var(--fd);font-weight:800;font-size:16px;color:#fff}
+.hxb-id span{font-size:11.5px;color:var(--cyan);font-weight:600}
+.hxb-txt{position:relative;padding:6px 16px 14px;font-size:12.5px;line-height:1.62;color:#b8c0cf;margin:0}
+.hxb-txt b{color:#eef2f8;font-weight:700}
+.hxb-foot{position:relative;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 16px;
+  border-top:1px solid rgba(255,255,255,.07);font-size:10.5px;color:var(--dim);font-family:var(--fm)}
+.hxb-foot a{color:var(--cyan);text-decoration:none;font-weight:600;white-space:nowrap}
+
+/* ─── FENÊTRE D'ACCUEIL « Salut ! installe l'app » ─── */
+.welcome-bg{position:fixed;inset:0;z-index:7000;background:rgba(0,0,0,.7);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  display:none;align-items:center;justify-content:center;padding:24px}
+.welcome-bg.show{display:flex;animation:wcfade .25s ease}
+@keyframes wcfade{from{opacity:0}to{opacity:1}}
+.welcome-card{position:relative;width:100%;max-width:420px;border-radius:26px;overflow:hidden;padding:26px 22px 22px;text-align:center;
+  background:linear-gradient(180deg,#13151d,#0a0b10);border:1px solid rgba(255,255,255,.14);
+  box-shadow:0 30px 80px rgba(0,0,0,.7);animation:wcslide .38s cubic-bezier(.2,.9,.25,1)}
+@keyframes wcslide{from{opacity:0;transform:translateY(26px) scale(.97)}to{opacity:1;transform:none}}
+.welcome-card::after{content:"";position:absolute;top:-42%;left:50%;transform:translateX(-50%);width:150%;height:62%;pointer-events:none;
+  background:radial-gradient(50% 60% at 50% 50%,rgba(39,211,255,.18),transparent 70%)}
+.wc-close{position:absolute;top:14px;right:14px;width:40px;height:40px;border-radius:13px;cursor:pointer;z-index:3;
+  background:linear-gradient(180deg,#2c2f3a,#16181f);border:1px solid rgba(255,255,255,.16);
+  display:grid;place-items:center;color:#f5f5f7;font-size:23px;line-height:1;transition:.16s;
+  box-shadow:0 6px 16px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.2)}
+.wc-close:hover{background:linear-gradient(180deg,#ff5a5a,#c11a1a);border-color:#ff7a7a}
+.wc-close:active{transform:translateY(2px) scale(.95)}
+.wc-emoji{position:relative;font-size:46px;line-height:1;margin-bottom:8px;animation:wcwave 2.6s ease-in-out infinite;transform-origin:70% 80%}
+@keyframes wcwave{0%,100%{transform:rotate(0)}20%{transform:rotate(16deg)}40%{transform:rotate(-8deg)}60%{transform:rotate(12deg)}}
+.wc-title{position:relative;margin:0 0 8px;font-family:var(--fd);font-weight:900;font-size:23px;color:#fff}
+.wc-lead{position:relative;font-size:13.5px;color:var(--muted);line-height:1.55;margin:0 0 20px}
+.wc-choice{position:relative;display:flex;gap:12px}
+.wc-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:7px;padding:17px 10px;border-radius:18px;cursor:pointer;transition:.18s;
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);color:#fff;font-family:var(--fd);font-weight:800;font-size:14px}
+.wc-btn .em{font-size:30px;line-height:1}
+.wc-btn:active{transform:scale(.96)}
+.wc-btn.android:hover{border-color:#3ddc84;box-shadow:0 0 0 3px rgba(61,220,132,.18),0 10px 26px rgba(61,220,132,.18)}
+.wc-btn.ios:hover{border-color:#e7ecf3;box-shadow:0 0 0 3px rgba(231,236,243,.16),0 10px 26px rgba(255,255,255,.12)}
+.wc-steps{display:none;position:relative;text-align:left}
+.wc-steps.show{display:block;animation:wcland .4s both}
+@keyframes wcland{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}
+.wc-back{display:inline-flex;align-items:center;gap:6px;background:none;border:none;color:var(--cyan);font-weight:700;font-size:13px;cursor:pointer;margin-bottom:12px;font-family:var(--fd)}
+.wc-steps h4{margin:0 0 13px;font-family:var(--fd);font-weight:800;font-size:16px;color:#fff;display:flex;align-items:center;gap:8px}
+.wc-step{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);
+  border-radius:14px;padding:12px 14px;margin-bottom:9px;font-size:13px;color:#dbe6f5;line-height:1.42}
+.wc-step b{color:#fff}
+.wc-n{flex:0 0 auto;width:26px;height:26px;border-radius:50%;background:var(--cyan);color:#06121a;
+  font-family:var(--fd);font-weight:900;font-size:13px;display:grid;place-items:center}
+.wc-warn{font-size:12.5px;color:#ffd60a;background:rgba(255,214,10,.08);border:1px solid rgba(255,214,10,.25);
+  border-radius:12px;padding:11px 13px;margin-bottom:11px;line-height:1.45}
+
+/* ─── NAVBAR FLOTTANTE EN PILULE ANIMÉE ─── */
+.navbar{left:12px;right:12px;bottom:calc(10px + env(safe-area-inset-bottom,0));height:62px;
+  border-radius:32px;padding:0 6px;z-index:2000;overflow:visible;
+  background:var(--glass2);backdrop-filter:blur(34px) saturate(180%);-webkit-backdrop-filter:blur(34px) saturate(180%);
+  border:1px solid rgba(255,255,255,.10);
+  box-shadow:0 18px 44px rgba(0,0,0,.6),0 0 26px rgba(39,211,255,.10),0 0 40px rgba(31,217,154,.07)}
+.navbar .nav-ind{display:none}
+.nbtab{border-radius:22px;margin:6px 1px}
+/* anneau lumineux navbar (cyan→vert) */
+.nav-ring{position:absolute;inset:0;border-radius:32px;z-index:1;pointer-events:none;overflow:hidden;padding:1.4px;
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude}
+.nav-ring::before{content:"";position:absolute;inset:-80%;
+  background:conic-gradient(from 0deg,transparent 0 50%,#27d3ff 64%,#eafcff 72%,#1fd99a 82%,transparent 100%);
+  animation:neonspin 7s linear infinite}
+/* onglet actif : bleu maquette + halo */
+.nbtab.active svg{stroke:#4d9fff;filter:drop-shadow(0 0 7px rgba(77,159,255,.8));transform:translateY(-1px) scale(1.08)}
+.nbtab.active span{color:#4d9fff}
+.nbtab.active .ic{filter:grayscale(0) opacity(1) drop-shadow(0 0 9px rgba(77,159,255,.6));transform:scale(1.12) translateY(-1px)}
+
+/* ═══════════════════════════════════════════════════════════════
+   ✦ LANDING PREMIUM : bus 3D · titre métal · partenariat CTS
+   ✦ FENÊTRE FAVORIS : activer les notifications (cloche métal)
+   @ By Brice Jct · Alpha OS
+   ═══════════════════════════════════════════════════════════════ */
+.land-hero{padding:3vh 22px 3vh !important}
+
+/* ─── LOGO BUS 3D ─── */
+.bus3d{position:relative;width:min(78vw,300px);margin:0 auto 4px;animation:landup .8s both}
+.bus3d svg{display:block;width:100%;height:auto;position:relative;z-index:2;
+  filter:drop-shadow(0 24px 30px rgba(0,0,0,.55)) drop-shadow(0 0 22px rgba(39,211,255,.12))}
+.bus3d-glow{position:absolute;inset:-8% -6% 6% -6%;z-index:1;pointer-events:none;filter:blur(34px);opacity:.7;
+  background:radial-gradient(50% 50% at 50% 46%, rgba(39,211,255,.42), transparent 70%),
+            radial-gradient(46% 46% at 50% 64%, rgba(226,0,26,.18), transparent 72%)}
+.bus-float{animation:busfloat 4.5s ease-in-out infinite;transform-origin:center}
+@keyframes busfloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+.bus-hl{animation:bushl 2.6s ease-in-out infinite}
+@keyframes bushl{0%,100%{opacity:.9;filter:drop-shadow(0 0 5px rgba(159,232,255,.7))}50%{opacity:1;filter:drop-shadow(0 0 13px rgba(159,232,255,1))}}
+.bus-streak{animation:busstreak 5s ease-in-out infinite}
+@keyframes busstreak{0%,100%{opacity:.5}50%{opacity:1}}
+
+/* ─── TITRE MÉTAL (vis + reflet animé) ─── */
+.metal-plate{position:relative;display:inline-block;padding:13px 30px 15px;border-radius:15px;margin:2px 0 16px;overflow:hidden;
+  background:linear-gradient(160deg,#2b2e36 0%,#15171c 38%,#22252c 62%,#0e1014 100%);
+  border:1px solid rgba(255,255,255,.16);
+  box-shadow:inset 0 1.5px 0 rgba(255,255,255,.28),inset 0 -3px 7px rgba(0,0,0,.6),0 18px 50px rgba(0,0,0,.6);
+  animation:landup .8s .05s both}
+.metal-text{font-family:'Orbitron',var(--fd),sans-serif;font-weight:900;font-size:clamp(30px,9vw,54px);letter-spacing:1px;line-height:1;white-space:nowrap;
+  background:linear-gradient(180deg,#fefefe 0%,#cfd6e2 18%,#8a93a4 40%,#ffffff 52%,#9aa3b4 64%,#5e6675 82%,#dfe5ee 100%);
+  background-size:100% 250%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;
+  -webkit-text-stroke:.6px rgba(0,0,0,.42);
+  filter:drop-shadow(0 2px 1px rgba(255,255,255,.28)) drop-shadow(0 4px 8px rgba(0,0,0,.7));
+  animation:chromeflow 6s ease-in-out infinite}
+.metal-shine{position:absolute;top:0;left:-60%;width:38%;height:100%;pointer-events:none;z-index:3;
+  background:linear-gradient(105deg,transparent,rgba(255,255,255,.55),transparent);transform:skewX(-18deg);
+  animation:metalshine 4.5s ease-in-out infinite}
+@keyframes metalshine{0%{left:-60%}55%{left:135%}100%{left:135%}}
+.screw{position:absolute;width:13px;height:13px;border-radius:50%;z-index:4;
+  background:radial-gradient(circle at 35% 30%,#f4f6f9,#9aa1ad 46%,#474c56 82%);
+  box-shadow:inset 0 1px 1px rgba(255,255,255,.6),inset 0 -1px 2px rgba(0,0,0,.6),0 1px 2px rgba(0,0,0,.5)}
+.screw::after{content:"";position:absolute;inset:0;margin:auto;width:8px;height:1.7px;background:rgba(18,20,24,.85);border-radius:2px;transform:rotate(42deg)}
+.screw.tl{top:7px;left:7px}.screw.tr{top:7px;right:7px}.screw.bl{bottom:7px;left:7px}.screw.br{bottom:7px;right:7px}
+
+/* ─── BANDEAU PARTENARIAT CTS + BADGE LICENCE ─── */
+.cts-partner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;text-align:left;
+  max-width:540px;margin:0 0 22px;padding:9px 13px;border-radius:16px;
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  animation:landup .8s .2s both}
+.ctsp-ic{font-size:17px;line-height:1;flex:0 0 auto}
+.ctsp-txt{flex:1;min-width:170px;font-size:11.5px;color:rgba(255,255,255,.82);line-height:1.42}
+.ctsp-txt b{color:#fff;font-weight:700}
+.ctsp-badge{display:inline-flex;align-items:center;gap:5px;flex:0 0 auto;padding:5px 11px;border-radius:20px;
+  font-family:var(--fd);font-weight:800;font-size:10.5px;letter-spacing:.3px;color:#bff7d6;
+  background:rgba(31,217,154,.14);border:1px solid rgba(31,217,154,.45);box-shadow:0 0 14px rgba(31,217,154,.18)}
+.ctsp-badge svg{width:15px;height:15px;fill:#1fd99a}
+.ctsp-badge .ck{stroke:#06160e}
+
+/* ─── FENÊTRE FAVORIS : activer notifications ─── */
+.favnotif-bg{position:fixed;inset:0;z-index:7200;background:rgba(0,0,0,.72);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);display:none;align-items:center;justify-content:center;padding:24px}
+.favnotif-bg.show{display:flex;animation:wcfade .25s ease}
+.favnotif-card{position:relative;width:100%;max-width:410px;border-radius:26px;overflow:hidden;padding:24px 22px 22px;text-align:center;
+  background:linear-gradient(180deg,#13151d,#0a0b10);border:1px solid rgba(255,255,255,.14);
+  box-shadow:0 30px 80px rgba(0,0,0,.7);animation:wcslide .38s cubic-bezier(.2,.9,.25,1)}
+.favnotif-card::after{content:"";position:absolute;top:-44%;left:50%;transform:translateX(-50%);width:150%;height:64%;pointer-events:none;
+  background:radial-gradient(50% 60% at 50% 50%,rgba(173,216,255,.18),transparent 70%)}
+.fn-close{position:absolute;top:14px;right:14px;width:40px;height:40px;border-radius:13px;cursor:pointer;z-index:3;
+  background:linear-gradient(180deg,#2c2f3a,#16181f);border:1px solid rgba(255,255,255,.16);display:grid;place-items:center;
+  color:#f5f5f7;font-size:23px;line-height:1;transition:.16s;box-shadow:0 6px 16px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.2)}
+.fn-close:hover{background:linear-gradient(180deg,#ff5a5a,#c11a1a);border-color:#ff7a7a}
+.fn-close:active{transform:translateY(2px) scale(.95)}
+.metal-bell{position:relative;width:96px;height:96px;margin:6px auto 6px;animation:bellpulse 2.8s ease-in-out infinite}
+.metal-bell svg{width:100%;height:100%;display:block}
+@keyframes bellpulse{0%,100%{filter:drop-shadow(0 0 8px rgba(255,255,255,.22)) drop-shadow(0 8px 16px rgba(0,0,0,.6))}50%{filter:drop-shadow(0 0 18px rgba(173,216,255,.55)) drop-shadow(0 8px 16px rgba(0,0,0,.6))}}
+.bell-shine{transform:translateX(-26px) skewX(-16deg);animation:bellshine 3.6s ease-in-out infinite}
+@keyframes bellshine{0%{transform:translateX(-26px) skewX(-16deg)}55%{transform:translateX(118px) skewX(-16deg)}100%{transform:translateX(118px) skewX(-16deg)}}
+.fn-title{margin:4px 0 8px;font-family:var(--fd);font-weight:900;font-size:22px;color:#fff}
+.fn-lead{font-size:13.5px;color:var(--muted);line-height:1.55;margin:0 0 18px}
+.fn-lead b{color:#fff}
+.fn-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:15px 18px;border-radius:16px;cursor:pointer;
+  border:none;font-family:var(--fd);font-weight:800;font-size:15px;color:#06121a;
+  background:linear-gradient(180deg,#5fd3ff,#1f8dff);box-shadow:0 12px 30px rgba(39,141,255,.35),inset 0 1px 0 rgba(255,255,255,.4);transition:transform .15s}
+.fn-btn:active{transform:scale(.97)}
+.fn-btn.ok{background:linear-gradient(180deg,#3ee87f,#15b85a);box-shadow:0 12px 30px rgba(31,217,154,.35),inset 0 1px 0 rgba(255,255,255,.4)}
+.fn-hint{margin:13px 0 0;font-size:11.5px;color:var(--dim);line-height:1.5}
+.fn-hint b{color:var(--cyan)}
+
+/* ═══════════ AJUSTEMENTS : titre carte · bandeau favoris · bloc Brice ═══════════ */
+/* Titre Carte = rendu accueil (compact, lisible sur la map) */
+#view-map .topbar.map-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;
+  background:linear-gradient(180deg,rgba(0,0,0,.62),rgba(0,0,0,.18) 70%,transparent)}
+.map-head .hx-cts{gap:8px}
+.map-head .hx-bar{height:30px}
+.map-head .hx-cts-txt b{font-size:13px}
+.map-head .hx-cts-txt span{font-size:11px}
+.map-head .hx-ekg{width:42px;height:23px}
+.map-head .hx-logo.chrome{font-size:clamp(19px,5.6vw,25px)}
+
+/* Bandeau notifications (haut des Favoris) */
+.fav-notice{display:flex;align-items:flex-start;gap:11px;margin:0 14px 6px;padding:13px 15px;border-radius:16px;
+  background:linear-gradient(135deg,rgba(39,211,255,.10),rgba(31,217,154,.06));
+  border:1px solid rgba(39,211,255,.28);box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 8px 24px rgba(0,0,0,.3)}
+.fav-notice .fnc-ic{font-size:22px;line-height:1;flex:0 0 auto;transform-origin:50% 0;
+  filter:drop-shadow(0 0 8px rgba(39,211,255,.5));animation:fncbell 2.8s ease-in-out infinite}
+@keyframes fncbell{0%,86%,100%{transform:rotate(0)}90%{transform:rotate(12deg)}94%{transform:rotate(-9deg)}98%{transform:rotate(5deg)}}
+.fav-notice .fnc-tx{font-size:12px;line-height:1.5;color:#cdd6e2}
+.fav-notice .fnc-tx b{color:#fff;font-weight:700}
+
+/* Bloc Brice : compact, fin, centré (bas de l'accueil) */
+.hx-brice{max-width:330px;margin:18px auto 2px !important;padding:0 !important;border-radius:18px !important;text-align:center}
+.hxb-top{justify-content:center !important;gap:9px !important;padding:13px 14px 0 !important}
+.hxb-ava{width:34px !important;height:34px !important;font-size:18px !important;border-radius:10px !important}
+.hxb-id b{font-size:13.5px !important}
+.hxb-id span{font-size:10px !important}
+.hxb-txt{padding:6px 16px 0 !important;font-size:10.8px !important;line-height:1.5 !important;text-align:center !important}
+.hxb-foot{flex-direction:column !important;justify-content:center !important;gap:3px !important;border-top:none !important;padding:9px 14px 12px !important;font-size:9.5px !important}
+</style>
+</head>
+<body>
+
+<!-- ═══════════ PAGE D'ACCUEIL (présentation) ═══════════ -->
+<div id="landing">
+  <div class="land-glow"></div>
+  <div class="land-scroll">
+    <div class="land-nav">
+      <div class="land-logo"><span class="land-mark"></span> Strass<span class="amp">&amp;</span>Go</div>
+    </div>
+    <div class="land-hero">
+      <!-- LOGO BUS 3D (avant d'un bus réseau CTS) -->
+      <div class="bus3d" aria-hidden="true">
+        <div class="bus3d-glow"></div>
+        <svg viewBox="0 0 420 320" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="busBody" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#ffffff"/><stop offset=".5" stop-color="#eef1f5"/>
+              <stop offset=".82" stop-color="#cfd5dd"/><stop offset="1" stop-color="#a9b0ba"/>
+            </linearGradient>
+            <linearGradient id="busRoof" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#dde2e9"/><stop offset="1" stop-color="#aeb6c0"/></linearGradient>
+            <linearGradient id="busGlass" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1d4a66"/><stop offset=".5" stop-color="#0d2336"/><stop offset="1" stop-color="#08161f"/></linearGradient>
+            <linearGradient id="busStripe" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#E2001A"/><stop offset="1" stop-color="#ff5a4d"/></linearGradient>
+            <radialGradient id="busHl" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#eafcff"/><stop offset=".4" stop-color="#9fe8ff"/><stop offset="1" stop-color="#2aa8d8"/></radialGradient>
+            <linearGradient id="busBumper" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a3f47"/><stop offset="1" stop-color="#15181d"/></linearGradient>
+          </defs>
+          <ellipse cx="210" cy="300" rx="150" ry="15" fill="#000" opacity=".45"/>
+          <g class="bus-float">
+            <g fill="#2a2d33"><rect x="40" y="118" width="20" height="34" rx="5"/><rect x="360" y="118" width="20" height="34" rx="5"/></g>
+            <rect x="44" y="122" width="12" height="26" rx="3" fill="#0d1b26"/><rect x="364" y="122" width="12" height="26" rx="3" fill="#0d1b26"/>
+            <rect x="62" y="44" width="296" height="234" rx="34" fill="url(#busBody)" stroke="#9aa2ac" stroke-width="1.5"/>
+            <rect x="74" y="40" width="272" height="40" rx="20" fill="url(#busRoof)"/>
+            <rect x="92" y="63" width="236" height="34" rx="9" fill="#0a0c10"/>
+            <text x="210" y="86" text-anchor="middle" font-family="Orbitron,Sora,sans-serif" font-weight="800" font-size="19" fill="#ffb020" letter-spacing="2">STRASS&amp;GO</text>
+            <path d="M96 112 q0 -8 9 -8 h190 q9 0 9 8 v52 q0 9 -9 9 h-190 q-9 0 -9 -9 z" fill="url(#busGlass)" stroke="#0a1820" stroke-width="2"/>
+            <g class="bus-streak"><polygon points="120,106 152,106 110,178 84,178" fill="#fff" opacity=".16"/><polygon points="172,106 190,106 152,178 136,178" fill="#fff" opacity=".10"/></g>
+            <line x1="210" y1="106" x2="210" y2="172" stroke="#0a1820" stroke-width="2"/>
+            <line x1="110" y1="168" x2="160" y2="120" stroke="#1b2730" stroke-width="2" opacity=".6"/><line x1="248" y1="120" x2="298" y2="168" stroke="#1b2730" stroke-width="2" opacity=".6"/>
+            <rect x="62" y="186" width="296" height="16" fill="url(#busStripe)"/><rect x="62" y="202" width="296" height="5" fill="#3a3f47"/>
+            <rect x="184" y="212" width="52" height="22" rx="5" fill="#0a0c10"/><text x="210" y="228" text-anchor="middle" font-family="Sora,sans-serif" font-weight="900" font-size="13" fill="#fff" letter-spacing="1">cts</text>
+            <g class="bus-hl"><rect x="84" y="214" width="46" height="22" rx="8" fill="url(#busHl)"/><rect x="290" y="214" width="46" height="22" rx="8" fill="url(#busHl)"/></g>
+            <rect x="86" y="240" width="30" height="8" rx="4" fill="#ffae00"/><rect x="304" y="240" width="30" height="8" rx="4" fill="#ffae00"/>
+            <rect x="70" y="250" width="280" height="26" rx="13" fill="url(#busBumper)"/>
+            <rect x="176" y="256" width="68" height="15" rx="3" fill="#eef1f5"/><text x="210" y="267" text-anchor="middle" font-family="Sora,sans-serif" font-weight="800" font-size="10.5" fill="#0a0c10">STRASS·67</text>
+            <rect x="96" y="273" width="40" height="22" rx="11" fill="#0a0c10"/><rect x="284" y="273" width="40" height="22" rx="11" fill="#0a0c10"/>
+          </g>
+        </svg>
+      </div>
+
+      <!-- TITRE MÉTAL (vis + reflet animé) -->
+      <div class="metal-plate">
+        <span class="screw tl"></span><span class="screw tr"></span><span class="screw bl"></span><span class="screw br"></span>
+        <div class="metal-text">STRASS&amp;GO</div>
+        <span class="metal-shine"></span>
+      </div>
+
+      <!-- ACCROCHE -->
+      <h1 class="land-title">Ne ratez plus<br>jamais votre bus.</h1>
+      <p class="land-sub">Bus &amp; trams CTS <b>géolocalisés en direct</b>, <b>alerte</b> quand votre passage arrive à moins de 2 min, <b>météo &amp; qualité de l'air</b> en temps réel — tout Strasbourg dans une seule app, sur des <b>données 100% officielles CTS &amp; Eurométropole</b>.</p>
+
+      <!-- BANDEAU PARTENARIAT CTS + BADGE LICENCE -->
+      <div class="cts-partner">
+        <span class="ctsp-ic">🚍</span>
+        <span class="ctsp-txt">En partenariat avec la <b>CTS de Strasbourg</b> pour propulser cette app · créée par <b>Brice Jacotet</b></span>
+        <span class="ctsp-badge"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5z"/><path class="ck" d="m8.5 12 2.4 2.4 4.6-4.8" fill="none" stroke="#06160e" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Licence vérifiée</span>
+      </div>
+
+      <button id="land-go" class="land-btn">Découvrir <span class="land-rocket">🚀</span></button>
+    </div>
+
+    <!-- mini-carte LIVE (vrai réseau) -->
+    <div class="land-card">
+      <div class="ll-head"><span>🗺️ Le réseau, en direct, maintenant</span><span class="hmm-live"><span class="livedot"></span>LIVE</span></div>
+      <div id="lmini" class="land-map"></div>
+      <div class="ll-cap"><b id="ll-tram">—</b> trams · <b id="ll-bus">—</b> bus suivis à la seconde, calés sur la route</div>
+    </div>
+
+    <!-- pitch -->
+    <div class="land-pitch">
+      <h2>La <span class="hl">seule app</span> qui géolocalise les bus &amp; trams de Strasbourg en direct.</h2>
+      <p>On est les <b>premiers</b> à le faire — et c'est signé <b>Strass&amp;Go</b>. Pensé pour <b>simplifier la vie des Strasbourgeois·es</b> : fini l'attente dans le doute, tu vois ton bus arriver pour de vrai.</p>
+    </div>
+
+    <!-- features -->
+    <div class="land-feats">
+      <div class="feat"><span class="fic">🔎</span><b>Cherche un arrêt</b><span>Prochains passages bus &amp; tram en temps réel, retards inclus.</span></div>
+      <div class="feat"><span class="fic">📍</span><b>Carte live</b><span>Tous les véhicules géolocalisés, calés sur la vraie route.</span></div>
+      <div class="feat"><span class="fic">⭐</span><b>Favoris &amp; 🔔 alertes</b><span>Sois prévenu quand ton bus approche.</span></div>
+      <div class="feat"><span class="fic">🌤️</span><b>Météo &amp; air</b><span>Conditions du moment à Strasbourg, en un coup d'œil.</span></div>
+      <div class="feat"><span class="fic">📲</span><b>Appli installable</b><span>Plein écran, rapide, et hors-ligne.</span></div>
+      <div class="feat"><span class="fic">🆓</span><b>100% gratuit</b><span>Données officielles CTS &amp; Eurométropole.</span></div>
+    </div>
+
+    <button id="land-go3" class="land-btn land-btn2">Entrer dans l'app <span class="land-rocket">🚀</span></button>
+
+    <div class="land-install" id="land-install" style="display:none">
+      <div class="li-card">
+        <div class="li-ico">📲</div>
+        <div class="li-txt">
+          <b>Installe Strass&amp;Go</b>
+          <span>Ajoute l'app à ton écran d'accueil : ouverture plein écran, plus rapide, et fonctionne même hors-ligne.</span>
+        </div>
+        <button class="li-btn" id="li-go">Installer</button>
+      </div>
+      <div class="li-steps" id="li-steps"></div>
+      <div class="li-use">Une fois installée : ouvre-la comme une vraie app → cherche un arrêt → ajoute-le en ⭐ favori → active la 🔔 pour être prévenu quand ton bus arrive.</div>
+    </div>
+    <div class="land-foot">@ By Brice Jct · Alpha OS · Groupe Alpha Nex Strasbourg</div>
+  </div>
+</div>
+
+<!-- ═══════════ VUE ACCUEIL (refonte Stitch) ═══════════ -->
+<div class="view active" id="view-home">
+  <div class="home-scroll">
+
+    <!-- HEADER : CTS Connecté + EKG  /  STRASS&GO chrome -->
+    <header class="hx-head">
+      <div class="hx-cts">
+        <span class="hx-bar"></span>
+        <div class="hx-cts-txt"><b>CTS</b><span>Connecté</span></div>
+        <svg class="hx-ekg" viewBox="0 0 48 26" aria-hidden="true">
+          <path class="ekg-base" d="M0,13 H15 l3,-9 l4,17 l3,-12 l2,4 H30 l2.5,-6 l2.5,11 l2,-5 H48"/>
+          <path class="ekg-run"  d="M0,13 H15 l3,-9 l4,17 l3,-12 l2,4 H30 l2.5,-6 l2.5,11 l2,-5 H48"/>
+        </svg>
+      </div>
+      <div class="hx-logo chrome">STRASS&amp;GO</div>
+    </header>
+
+    <!-- BARRE DE RECHERCHE -->
+    <div class="hx-search">
+      <svg class="hx-srch-ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input class="search-inp hx-inp" id="home-inp" placeholder="Rechercher sur le réseau CTS (Bus & Tram)" autocomplete="off" spellcheck="false"/>
+    </div>
+    <div id="home-results" class="home-results"></div>
+
+    <!-- CARTES À CONTOUR LUMINEUX ANIMÉ -->
+    <div class="hx-cards">
+      <div class="hx-card wx" id="card-weather" onclick="openWeatherDetail()" style="--c1:#34a8ff;--c2:#0a5cff;--spd:6s">
+        <i class="nf"></i>
+        <div class="hx-card-in">
+          <div class="hx-lbl">Météo Strasbourg</div>
+          <div class="hx-card-mid">
+            <div class="hx-big" id="w-temp">—°</div>
+            <span class="hx-ico" id="w-ico">⛅</span>
+          </div>
+          <div class="hx-desc" id="w-desc">Chargement…</div>
+          <div class="hx-sub"><span id="w-feel">ressenti —°</span><span id="w-wind">— km/h</span><span id="w-hum">— %</span></div>
+        </div>
+      </div>
+      <div class="hx-card air" id="card-air" onclick="openAirDetail()" style="--c1:#27e0a0;--c2:#0a9e63;--spd:7s">
+        <i class="nf"></i>
+        <div class="hx-card-in">
+          <div class="hx-lbl">Qualité de l'air</div>
+          <div class="hx-card-mid">
+            <div class="hx-big" id="a-aqi">—</div>
+            <span class="hx-ico" id="a-ico">🌫️</span>
+          </div>
+          <div class="hx-desc" id="a-desc">Chargement…</div>
+          <div class="hx-sub"><span id="a-pm25">PM2.5 —</span><span id="a-pm10">PM10 —</span><span id="a-no2">NO₂ —</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- APERÇU RÉSEAU LIVE -->
+    <h2 class="hx-sectitle">Aperçu du réseau en direct</h2>
+    <div class="home-mini-wrap hx-mapcard">
+      <div class="hx-live"><span class="hx-live-dot"></span>LIVE</div>
+      <div id="mini" class="home-mini"></div>
+      <button class="hmm-open" id="mini-open">Ouvrir la carte plein écran →</button>
+    </div>
+
+    <!-- CONTENEUR INGÉNIEUR BRICE JACOTET -->
+    <div class="hx-brice">
+      <div class="hxb-top">
+        <div class="hxb-ava">👨‍💻</div>
+        <div class="hxb-id"><b>Brice Jacotet</b><span>Ingénieur web · Concepteur d'applications</span></div>
+      </div>
+      <p class="hxb-txt">
+        Strass&amp;Go est <b>conçue &amp; développée à Strasbourg</b> par Brice Jacotet, fondateur du <b>Groupe Alpha Nex</b>.
+        Une app pensée pour <b>simplifier le quotidien des Strasbourgeois·es</b> : bus &amp; tram en temps réel sur les
+        <b>données 100% officielles CTS &amp; Eurométropole</b>, rapide, installable, et <b>sans publicité</b>.
+      </p>
+      <div class="hxb-foot">
+        <span>@ By Brice Jct · Alpha OS · Groupe Alpha Nex</span>
+        <a href="https://www.alpha-korner.com" target="_blank" rel="noopener">alpha-korner.com →</a>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════ VUE MAP ═══════════ -->
+<div class="view" id="view-map">
+  <div class="topbar map-head">
+    <div class="hx-cts">
+      <span class="hx-bar"></span>
+      <div class="hx-cts-txt"><b>CTS</b><span id="txt-status">Connecté</span></div>
+      <svg class="hx-ekg" viewBox="0 0 48 26" aria-hidden="true">
+        <path class="ekg-base" d="M0,13 H15 l3,-9 l4,17 l3,-12 l2,4 H30 l2.5,-6 l2.5,11 l2,-5 H48"/>
+        <path class="ekg-run"  d="M0,13 H15 l3,-9 l4,17 l3,-12 l2,4 H30 l2.5,-6 l2.5,11 l2,-5 H48"/>
+      </svg>
+      <span class="dot" id="dot-status" style="display:none"></span>
+    </div>
+    <div class="hx-logo chrome">STRASS&amp;GO</div>
+  </div>
+  <div id="map"></div>
+
+  <div class="counters">
+    <div class="cntbox">
+      <div>
+        <b id="cnt-tram">—</b>
+        <span style="display:block">trams</span>
+      </div>
+      <svg style="stroke:var(--red);fill:none;stroke-width:2;stroke-linecap:round;width:18px;height:18px" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="12" rx="2.5"/><path d="M5 10h14M9 15l-1.5 4M15 15l1.5 4M9 3v-2M15 3v-2"/></svg>
+    </div>
+    <div class="cntbox">
+      <div>
+        <b id="cnt-bus">—</b>
+        <span style="display:block">bus</span>
+      </div>
+      <svg style="stroke:var(--cyan);fill:none;stroke-width:2;stroke-linecap:round;width:18px;height:18px" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="11" rx="2"/><path d="M3 11h18M8 16v3M16 16v3"/></svg>
+    </div>
+    <div class="livebadge"><span class="livedot"></span>LIVE</div>
+  </div>
+
+  <div class="map-filters">
+    <div class="fchip on" data-l="tram"><span class="dot2" style="background:#E2001A;box-shadow:0 0 6px #E2001A"></span>Trams</div>
+    <div class="fchip on" data-l="bus"><span class="dot2"></span>Bus</div>
+    <div class="fchip on" data-l="stops"><span class="dot2" style="background:rgba(255,255,255,.4)"></span>Arrêts</div>
+    <div class="fchip" data-l="pr"><span class="dot2" style="background:var(--green);box-shadow:0 0 6px var(--green)"></span>P+R</div>
+  </div>
+</div>
+
+<!-- ═══════════ VUE RECHERCHE ═══════════ -->
+<div class="view" id="view-search">
+  <div class="topbar"><h1>Recherche <span class="accent">arrêts</span></h1></div>
+  <div class="search-wrap">
+    <div class="search-bar">
+      <input class="search-inp" id="search-inp" placeholder="Nom d'arrêt, ex : Homme de Fer…" autocomplete="off" spellcheck="false"/>
+    </div>
+    <div class="search-results" id="search-results">
+      <div class="search-empty">
+        <div class="se-ico"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></div>
+        <h3>Cherche un arrêt</h3>
+        <p>Tape le nom d'un arrêt CTS pour voir ses prochains passages en temps réel.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ VUE FAVORIS ═══════════ -->
+<div class="view" id="view-favs">
+  <div class="topbar">
+    <h1>Mes <span class="accent">favoris</span></h1>
+    <button id="refresh-favs" style="background:rgba(39,211,255,.1);border:1px solid rgba(39,211,255,.3);color:var(--cyan);padding:7px 14px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer">↻ Rafraîchir</button>
+  </div>
+  <div class="fav-notice">
+    <span class="fnc-ic">🔔</span>
+    <div class="fnc-tx">Gère tes <b>alertes bus</b> ici : touche la <b>cloche</b> à droite d'un favori pour <b>activer ou couper</b> ses notifications. Tu es prévenu·e dès qu'un passage est à <b>moins de 2 min</b> de ton arrêt.</div>
+  </div>
+  <div class="fav-wrap" id="fav-wrap"></div>
+</div>
+
+<!-- ═══════════ VUE INFOS ═══════════ -->
+<div class="view" id="view-info">
+  <div class="topbar"><h1>Mon <span class="accent">compte</span></h1></div>
+  <div class="acc-wrap">
+    <div class="acc-card">
+      <div class="acc-ava" id="acc-ava">🙂</div>
+      <div class="acc-name" id="acc-disp">Voyageur</div>
+      <div class="acc-mail" id="acc-dispmail">Renseigne ton profil ci-dessous</div>
+    </div>
+    <div class="acc-card">
+      <div class="acc-field"><label>Prénom</label><input id="acc-first" placeholder="Ton prénom" autocomplete="given-name"/></div>
+      <div class="acc-field"><label>Nom</label><input id="acc-last" placeholder="Ton nom" autocomplete="family-name"/></div>
+      <div class="acc-field"><label>Email</label><input id="acc-email" type="email" placeholder="prenom@email.com" autocomplete="email"/></div>
+      <div class="acc-field"><label>Téléphone</label><input id="acc-phone" type="tel" placeholder="06 12 34 56 78" autocomplete="tel"/></div>
+      <div class="acc-field"><label>Ville</label><input id="acc-city" placeholder="Strasbourg" autocomplete="address-level2"/></div>
+      <button class="acc-save" id="acc-save">💾 Enregistrer mon profil</button>
+      <div class="acc-soon"><span>☁️</span><span>Synchronisation <b>Supabase</b> à venir — pour l'instant ton profil est enregistré en local sur cet appareil.</span></div>
+    </div>
+    <div class="acc-card" style="text-align:center;padding:16px;font-size:12px;color:var(--muted)">
+      <span class="heart">♥</span> Strass&amp;Go · <a href="https://www.alpha-korner.com" target="_blank" style="color:var(--cyan)">Alpha Korner</a> · Groupe Alpha Nex Strasbourg
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL ARRÊT ═══════════ -->
+<div class="modal-bg" id="modal-bg">
+  <div class="modal">
+    <div class="modal-illu" id="m-illu"></div>
+    <div class="modal-h">
+      <div class="grab"></div>
+      <div class="ey"><span id="m-ey">Arrêt CTS</span> <span class="ref" id="m-ref">—</span></div>
+      <h3 id="m-name">—</h3>
+      <div class="lines-row" id="m-lines"></div>
+      <div class="share-btn" id="m-share" title="Partager">
+        <svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg>
+      </div>
+      <div class="close-btn" id="m-close">×</div>
+    </div>
+    <div class="modal-body" id="m-body">
+      <div class="dep-load"><div class="sp"></div>Lecture des passages en temps réel…</div>
+    </div>
+    <div class="dep-refresh" id="dep-refresh"></div>
+  </div>
+</div>
+
+<!-- ═══════════ OVERLAY DÉTAIL (Météo / Air) ═══════════ -->
+<div class="detail-bg" id="detail-bg">
+  <div class="detail-panel">
+    <div class="detail-head" id="detail-head">
+      <div class="dh-grab"></div>
+      <div class="dh-eyebrow" id="dh-eyebrow">DÉTAIL</div>
+      <h2 id="dh-title">—</h2>
+      <div class="detail-close" id="detail-close">×</div>
+    </div>
+    <div class="detail-body" id="detail-body"></div>
+  </div>
+</div>
+
+<!-- ═══════════ FENÊTRE INSTALLATION PWA ═══════════ -->
+<div class="pwa-modal" id="pwa-modal">
+  <div class="pm-card">
+    <div class="pm-close" id="pm-close">×</div>
+    <div class="pm-ico">📲</div>
+    <h3>Installer Strass&amp;Go</h3>
+    <p class="pm-lead">Ajoute l'app à ton écran d'accueil : elle s'ouvre en plein écran, démarre plus vite et marche même hors-ligne — comme une vraie appli.</p>
+    <div class="pm-steps" id="pm-steps"></div>
+    <div class="pm-foot">Une fois ajoutée, ouvre <b>Strass&amp;Go</b> depuis ton écran d'accueil 🚀</div>
+  </div>
+</div>
+
+<!-- ═══════════ FENÊTRE D'ACCUEIL : Salut ! installe l'app ═══════════ -->
+<div class="welcome-bg" id="welcome-bg">
+  <div class="welcome-card">
+    <div class="wc-close" id="wc-close">×</div>
+    <div id="wc-intro">
+      <div class="wc-emoji">👋</div>
+      <h3 class="wc-title">Salut&nbsp;!</h3>
+      <p class="wc-lead">N'hésite pas à installer <b style="color:#fff">Strass&amp;Go</b> sur ton téléphone&nbsp;: ouverture plein écran, démarrage instantané, et ça marche même hors-ligne. Choisis ton appareil&nbsp;👇</p>
+      <div class="wc-choice">
+        <div class="wc-btn android" id="wc-android"><span class="em">🤖</span>Android</div>
+        <div class="wc-btn ios" id="wc-ios"><span class="em">🍎</span>iPhone (iOS)</div>
+      </div>
+    </div>
+    <div class="wc-steps" id="wc-steps-android">
+      <button class="wc-back" type="button">‹ Retour</button>
+      <h4>🤖 Installer sur Android</h4>
+      <div class="wc-step"><span class="wc-n">1</span><span>Ouvre le menu <b>⋮</b> en haut à droite de <b>Chrome</b></span></div>
+      <div class="wc-step"><span class="wc-n">2</span><span>Touche <b>« Installer l'application »</b> (ou « Ajouter à l'écran d'accueil »)</span></div>
+      <div class="wc-step"><span class="wc-n">3</span><span>Confirme — l'icône <b>Strass&amp;Go</b> apparaît sur ton écran ✅</span></div>
+    </div>
+    <div class="wc-steps" id="wc-steps-ios">
+      <button class="wc-back" type="button">‹ Retour</button>
+      <h4>🍎 Installer sur iPhone</h4>
+      <div class="wc-warn">⚠️ Sur iPhone, l'installation marche uniquement depuis <b>Safari</b>.</div>
+      <div class="wc-step"><span class="wc-n">1</span><span>Touche le bouton <b>⤴ Partager</b> en bas de Safari</span></div>
+      <div class="wc-step"><span class="wc-n">2</span><span>Fais défiler et choisis <b>« Sur l'écran d'accueil »</b></span></div>
+      <div class="wc-step"><span class="wc-n">3</span><span>Appuie sur <b>Ajouter</b> ✅</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ FENÊTRE FAVORIS : activer les notifications ═══════════ -->
+<div class="favnotif-bg" id="favnotif-bg">
+  <div class="favnotif-card">
+    <div class="fn-close" id="fn-close">×</div>
+    <div class="metal-bell" aria-hidden="true">
+      <svg viewBox="0 0 96 96">
+        <defs>
+          <linearGradient id="bellMetal" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#ffffff"/><stop offset=".22" stop-color="#d2d9e4"/>
+            <stop offset=".46" stop-color="#8c95a6"/><stop offset=".56" stop-color="#ffffff"/>
+            <stop offset=".72" stop-color="#9aa3b4"/><stop offset="1" stop-color="#5e6675"/>
+          </linearGradient>
+          <clipPath id="bellClip"><path d="M48 19c-9.4 0 -17 7.6 -17 17 v9 c0 4.8 -1.7 8.5 -5 11.8 h44 c-3.3 -3.3 -5 -7 -5 -11.8 v-9 c0 -9.4 -7.6 -17 -17 -17 z"/></clipPath>
+        </defs>
+        <circle cx="48" cy="17" r="4.2" fill="url(#bellMetal)" stroke="#2a2f38" stroke-width="1.5"/>
+        <path d="M48 19c-9.4 0 -17 7.6 -17 17 v9 c0 4.8 -1.7 8.5 -5 11.8 h44 c-3.3 -3.3 -5 -7 -5 -11.8 v-9 c0 -9.4 -7.6 -17 -17 -17 z" fill="url(#bellMetal)" stroke="#2a2f38" stroke-width="1.6"/>
+        <ellipse cx="48" cy="62" rx="6" ry="5" fill="url(#bellMetal)" stroke="#2a2f38" stroke-width="1.5"/>
+        <g clip-path="url(#bellClip)"><rect class="bell-shine" x="0" y="0" width="20" height="96" fill="#ffffff" opacity=".55"/></g>
+      </svg>
+    </div>
+    <h3 class="fn-title">Activez les notifications</h3>
+    <p class="fn-lead" id="fn-lead">Pour être prévenu·e quand votre bus arrive, activez les notifications. Une demande va s'afficher <b>en haut de votre navigateur</b> — touchez <b>« Autoriser »</b>.</p>
+    <button class="fn-btn" id="fn-activate">🔔 Activer les notifications</button>
+    <p class="fn-hint">Vous serez alerté·e dès qu'un passage est à <b>moins de 2 min</b> de votre arrêt favori. Activez la 🔔 sur un favori pour lancer l'alerte.</p>
+  </div>
+</div>
+
+<!-- ═══════════ NAVBAR (pilule flottante animée) ═══════════ -->
+<nav class="navbar">
+  <span class="nav-ind" id="nav-ind"></span>
+  <i class="nav-ring"></i>
+  <div class="nbtab active" data-view="home"><svg viewBox="0 0 24 24"><path d="M4 11.5 12 5l8 6.5"/><path d="M6 10.5V20h12v-9.5"/><path d="M10 20v-5h4v5"/></svg><span>Accueil</span></div>
+  <div class="nbtab" data-view="map"><svg viewBox="0 0 24 24"><polygon points="3 7 9 4 15 7 21 4 21 17 15 20 9 17 3 20"/><path d="M9 4.5v12.5M15 7v12.5"/></svg><span>Carte</span></div>
+  <div class="nbtab" data-view="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20.5 20.5-3.8-3.8"/></svg><span>Recherche</span></div>
+  <div class="nbtab" data-view="favs"><svg viewBox="0 0 24 24"><polygon points="12 3.5 14.6 8.9 20.6 9.6 16.1 13.7 17.4 19.6 12 16.5 6.6 19.6 7.9 13.7 3.4 9.6 9.4 8.9 12 3.5"/></svg><span>Favoris</span><span class="badge" id="fav-badge">0</span></div>
+  <div class="nbtab" data-view="info"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.6h.01"/></svg><span>Infos</span></div>
+</nav>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+/* ═══════════════════════════════════════════════════
+   Strass&Go — app logic
+   ═══════════════════════════════════════════════════ */
+"use strict";
+
+/* ── Couleurs lignes ── */
+const LINE_COLOR={A:"#E2001A",B:"#009FE3",C:"#F39200",D:"#50AF31",E:"#A04199",F:"#E5007D"};
+function lc(name,mode){
+  const n=String(name||"").trim().toUpperCase();
+  if(LINE_COLOR[n]) return LINE_COLOR[n];
+  if(mode==="tram"&&n.length===1) return LINE_COLOR[n]||"#c0392b";
+  return "#4a5e80";
+}
+
+/* ── Helpers SIRI ── */
+const asA=x=>x==null?[]:(Array.isArray(x)?x:[x]);
+function txt(v){
+  if(v==null) return "";
+  if(typeof v==="string"||typeof v==="number") return String(v);
+  if(Array.isArray(v)) return v.map(txt).filter(Boolean)[0]||"";
+  if(typeof v==="object") return txt(v.value??v.Value??v.text??v.name??"");
+  return "";
+}
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function deep(o,path){return path.split(".").reduce((a,k)=>a&&a[k]!=null?a[k]:null,o);}
+function firstD(data,key){
+  for(const c of[
+    deep(data,"Siri.ServiceDelivery."+key),
+    deep(data,"ServiceDelivery."+key),
+    data&&data[key],
+    deep(data,"Siri."+key),
+  ]) if(c!=null) return asA(c);
+  return [];
+}
+
+/* ── API ── */
+const Api={
+  async get(path){
+    const base=PROXY.replace(/\/+$/,"");
+    const r=await fetch(base+path,{headers:{Accept:"application/json"}});
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return r.json();
+  },
+  stops(){ return this.get("/siri/2.0/stoppoints-discovery"); },
+  et(){ return this.get("/siri/2.0/estimated-timetable"); },
+  sm(ref){ return this.get("/siri/2.0/stop-monitoring?MonitoringRef="+encodeURIComponent(ref)+"&PreviewInterval=PT90M&MaximumStopVisits=10"); },
+  pr(){ return this.get("/cts/park-and-ride"); },
+};
+
+/* ── État ── */
+const St={
+  map:null, canvas:null,
+  lStops:null, lVeh:null, lPr:null,
+  stops:new Map(),        // logicalCode→{ref(logical),code,name,lat,lng,lines:[]}
+  refIndex:new Map(),     // StopPointRef/StopCode→{lat,lng,name} (lookup véhicules)
+  vehErr:null,
+  veh:new Map(),          // key→marker
+  journeys:[],            // cache trajets (pour glissement fluide)
+  jmap:new Map(),         // key→trajet (fiche détaillée)
+  modalVeh:null,
+  vpos:new Map(),         // key→[lat,lng] position lissée mémorisée (anti-saut/recul)
+  tramPts:[],             // points échantillonnés du réseau tram (snapping)
+  lTram:null,             // layer tracé tram
+  tramLines:[],           // {ll,color} pour réutilisation (mini-map)
+  mini:null,              // instance Leaflet mini-map (page Accueil)
+  miniVeh:new Map(),      // véhicules sur la mini-map
+  lMiniTram:null,
+  show:{tram:true,bus:true,stops:true,pr:false},
+  favs:[],                // [{ref,name}]
+  cd:15, timer:null, tick:null,
+  modalRef:null,
+  curView:"map",
+  apiOk:false,
+};
+
+/* ── MAP INIT ── */
+function initMap(){
+  St.map=L.map("map",{zoomControl:false,preferCanvas:true,attributionControl:true,maxZoom:20})
+          .setView([48.5839,7.7455],13);
+  // Fond SATELLITE couleur jour (Esri World Imagery — gratuit, sans clé)
+  L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{
+    maxZoom:20,maxNativeZoom:19,attribution:'Imagerie &copy; Esri · Données CTS / Eurométropole'
+  }).addTo(St.map);
+  // Overlay transparent : routes + noms de rues lisibles par-dessus le satellite
+  L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}",{
+    maxZoom:20,maxNativeZoom:19,opacity:.95
+  }).addTo(St.map);
+  St.canvas=L.canvas({padding:0.5,tolerance:12});   // tolerance → arrêts cliquables même en dézoom
+  St.map.createPane("tramline");                 // tracé tram SOUS les arrêts/véhicules
+  St.map.getPane("tramline").style.zIndex=250;
+  St.lTram =L.layerGroup().addTo(St.map);
+  St.lStops=L.layerGroup().addTo(St.map);
+  St.lVeh  =L.layerGroup().addTo(St.map);
+  St.lPr   =L.layerGroup();
+  // échelle des marqueurs selon le zoom + anti-lag du glissement pendant le zoom
+  St.map.on("zoomstart",()=>document.body.classList.add("zooming"));
+  St.map.on("zoomend",()=>{ setVScale(); drawStops(); setTimeout(()=>document.body.classList.remove("zooming"),80); });
+  let _rt; St.map.on("moveend",()=>{ clearTimeout(_rt); _rt=setTimeout(drawStops,140); });
+  setVScale();
+}
+function setVScale(){
+  const z=St.map.getZoom();
+  const s = z<=8?0.5 : z<=10?0.62 : z<=12?0.78 : z<=14?0.9 : 1;
+  St.map.getContainer().style.setProperty("--vscale",s);
+}
+
+/* ── ARRÊTS ── */
+async function loadStops(){
+  let data;
+  try{ data=await Api.stops(); }catch(e){ setStatus(false,"Arrêts: "+e.message); throw e; }
+  const dels=firstD(data,"StopPointsDelivery");
+  let raw=[];
+  for(const d of dels) raw=raw.concat(asA(d?.AnnotatedStopPointRef??d));
+  if(!raw.length) raw=asA(deep(data,"Siri.StopPointsDelivery.AnnotatedStopPointRef")||deep(data,"StopPointsDelivery.AnnotatedStopPointRef"));
+  St.stops.clear(); St.refIndex.clear();
+  const groups=new Map();
+  for(const s of raw){
+    const ref=txt(s.StopPointRef||s.Ref);
+    const ext=s.Extension||s.extension||{};
+    const code=txt(ext.StopCode||ext.stopCode)||ref;            // ex "100C"
+    const logical=txt(ext.LogicalStopCode||ext.logicalStopCode)||code; // ex "100"
+    const loc=s.Location||s.location||{};
+    const lat=parseFloat(loc.Latitude??loc.latitude??s.Latitude);
+    const lng=parseFloat(loc.Longitude??loc.longitude??s.Longitude);
+    if(isNaN(lat)||isNaN(lng)) continue;
+    const name=txt(s.StopName||s.stopName)||ref;
+    const lines=asA(s.Lines&&(s.Lines.LineRef||s.Lines)).map(txt).filter(Boolean);
+    // index lookup véhicules (EstimatedCall référence le StopPointRef ou le StopCode)
+    if(ref)  St.refIndex.set(ref,{lat,lng,name});
+    if(code) St.refIndex.set(code,{lat,lng,name});
+    // fusion des quais d'un même arrêt physique par code logique
+    if(!logical) continue;
+    if(!groups.has(logical)) groups.set(logical,{code,name,lat,lng,n:1,lines:new Set(lines)});
+    else{ const g=groups.get(logical); g.lat+=lat; g.lng+=lng; g.n++; lines.forEach(l=>g.lines.add(l)); }
+  }
+  groups.forEach((g,logical)=>{
+    St.stops.set(logical,{ref:logical,code:g.code,name:g.name,lat:g.lat/g.n,lng:g.lng/g.n,lines:[...g.lines]});
+  });
+  var _is=document.getElementById("info-stops"); if(_is)_is.textContent=St.stops.size+" arrêts";
+  setStatus(true,"Arrêts chargés ("+St.stops.size+")");
+  drawStops();
+}
+
+function drawStops(){
+  if(!St.lStops) return;
+  St.lStops.clearLayers();
+  if(!St.show.stops) return;
+  const z=St.map.getZoom();
+  const b=St.map.getBounds().pad(0.4);
+  const r = z<=7?1.6 : z<=10?2.3 : z<=12?3 : z<=14?4 : 5;   // plus petit en dézoom, jamais masqué
+  St.stops.forEach(s=>{
+    if(!b.contains([s.lat,s.lng])) return;
+    const tram=!!s.tram;
+    const rad   = tram ? r+2.2 : r;                          // arrêt tram PLUS GROS (passe au-dessus du tracé)
+    const ring  = tram ? "#E2001A" : "#27d3ff";              // tram rouge / bus cyan
+    const fill  = tram ? "#ffffff" : "#0c1322";
+    const weight= tram ? 2.4 : 1.6;
+    const m=L.circleMarker([s.lat,s.lng],{renderer:St.canvas,radius:rad,color:ring,weight,fillColor:fill,fillOpacity:.97,className:"sdot"});
+    m.bindTooltip((tram?"🚊 ":"🚌 ")+s.name,{direction:"top",offset:[0,-5]});
+    m.on("click",()=>openModal(s));
+    m.on("mouseover",function(){this.setStyle({radius:rad+3,fillColor:ring});});
+    m.on("mouseout", function(){this.setStyle({radius:rad,fillColor:fill});});
+    St.lStops.addLayer(m);
+  });
+}
+
+/* ── VÉHICULES ── */
+/* refresh DONNÉES toutes les 15s : on met juste à jour le cache des trajets */
+async function refreshVeh(){
+  let data;
+  try{
+    data=await Api.et();
+    var _il=document.getElementById("info-last"); if(_il)_il.textContent=new Date().toLocaleTimeString("fr-FR");
+    St.vehErr=null;
+    if(St.stops.size) setStatus(true,"MAJ "+new Date().toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit",second:"2-digit"}));
+  }catch(e){ St.vehErr=e.message; if(!St.stops.size) setStatus(false,e.message); return; }
+
+  const dels=firstD(data,"EstimatedTimetableDelivery");
+  let raw=[];
+  for(const d of dels){
+    for(const f of asA(d.EstimatedJourneyVersionFrame||d))
+      raw=raw.concat(asA(f.EstimatedVehicleJourney||f));
+  }
+  const out=[];
+  for(const j of raw){
+    const modeR=txt(j.VehicleMode).toLowerCase();
+    const line=txt(j.PublishedLineName)||txt(j.LineRef);
+    const isTram = /^[A-F]$/.test(line.trim().toUpperCase()) || modeR.includes("tram");
+    const mode=isTram?"tram":"bus";
+    const dir=txt(j.DirectionRef);
+    const calls=asA(j.EstimatedCalls?.EstimatedCall??j.EstimatedCalls)
+      .map(c=>{
+        const ref=txt(c.StopPointRef||c.StopPointName);
+        const s=St.refIndex.get(ref);
+        const t =Date.parse(txt(c.ExpectedDepartureTime)||txt(c.ExpectedArrivalTime)||txt(c.AimedDepartureTime)||"");
+        const at=Date.parse(txt(c.AimedDepartureTime)||txt(c.AimedArrivalTime)||"");   // horaire théorique
+        return s&&!isNaN(t)?{lat:s.lat,lng:s.lng,t,at:isNaN(at)?null:at,name:s.name}:null;
+      }).filter(Boolean).sort((a,b)=>a.t-b.t);
+    if(!calls.length) continue;
+    // destination : nom officiel sinon terminus (dernier arrêt du trajet)
+    const dest=txt(j.DestinationName)||txt(j.DirectionName)||calls[calls.length-1].name||"—";
+    // n° de véhicule + clé STABLE (indispensable pour l'anti-saut entre 2 refresh)
+    const fvj=j.FramedVehicleJourneyRef||{};
+    const vref=txt(j.VehicleRef);
+    const stable=txt(j.DatedVehicleJourneyRef)||txt(fvj.DatedVehicleJourneyRef)||vref||txt(j.VehicleJourneyName);
+    const key=stable||[line,dir,dest,calls[0].t].join("|");
+    out.push({key,line,dir,dest,mode,vref,calls,
+      lineRef:txt(j.LineRef), oper:txt(j.OperatorRef), dirName:txt(j.DirectionName),
+      jname:txt(j.VehicleJourneyName)||stable, origin:calls[0].name, term:calls[calls.length-1].name,
+      monitored:txt(j.Monitored)});
+  }
+  St.journeys=out;
+  St.jmap=new Map(out.map(j=>[j.key,j]));   // accès rapide pour la fiche détaillée
+  // nettoie les positions mémorisées des trajets disparus
+  const live=new Set(out.map(j=>j.key));
+  St.vpos.forEach((_,k)=>{ if(!live.has(k)) St.vpos.delete(k); });
+  renderVehicles();
+}
+
+/* ── PARAMÈTRES DE MOUVEMENT (réalistes · anti-saut · anti-recul) ──
+   L'API CTS ne diffuse PAS le GPS véhicule : la position est calculée à partir
+   des horaires SIRI réels (interpolation temporelle entre 2 arrêts). On lisse
+   ce suivi pour qu'il colle au planning réel sans jamais "streaker" ni reculer. */
+const MOVE={
+  tick:500,                  // doit matcher l'intervalle de St.vtick
+  alpha:0.16,                // lissage exponentiel (suivi doux du planning)
+  maxM:{bus:7.5, tram:6.5},  // pas max en mètres/tick = plafond de vitesse (tram un peu plus lent)
+  stopSnapM:24,              // bus : aimanté à l'arrêt quand il est à <24 m (reste sur un vrai point réseau)
+  holdSlackM:3,              // tolérance avant de considérer un mouvement comme un recul
+  rerouteM:240               // au-delà : vrai re-routage → on rejoint la cible même si "en arrière"
+};
+const M_PER_DEG=111320;
+function asLL(p){ return Array.isArray(p)?[p[0],p[1]]:[p.lat,p.lng]; }
+function distM(a,b){ a=asLL(a); b=asLL(b);
+  const dy=(a[0]-b[0])*M_PER_DEG, dx=(a[1]-b[1])*M_PER_DEG*COSLAT; return Math.hypot(dy,dx); }
+
+/* position interpolée temporelle d'un trajet à l'instant "now" */
+function journeyPos(j,now){
+  const calls=j.calls; if(!calls.length) return null;
+  let prev=null,next=null;
+  for(const c of calls){ if(c.t<=now) prev=c; else{ next=c; break; } }
+  if(prev&&next){
+    const f=Math.max(0,Math.min(1,(now-prev.t)/(next.t-prev.t||1)));
+    return {pos:[prev.lat+(next.lat-prev.lat)*f, prev.lng+(next.lng-prev.lng)*f], ns:next, ps:prev};
+  }
+  if(!prev&&next) return {pos:[next.lat,next.lng], ns:next, ps:null};
+  return null;
+}
+/* cible d'affichage = position interpolée.
+   TRAM : snappée sur les rails (tracé officiel).
+   BUS  : pas de tracé routier dans l'API → on aimante au moins le marqueur sur un VRAI arrêt
+          quand il en est très proche (évite qu'il flotte dans un bâtiment à l'arrêt). */
+function vehTarget(j,now){
+  const p=journeyPos(j,now); if(!p) return null;
+  let pos=p.pos;
+  if(j.mode==="tram"){
+    const s=snapTram(pos[0],pos[1]); if(s) pos=s;          // tram TOUJOURS calé sur les rails
+  }else{
+    // BUS : on cale sur le TRACÉ RÉEL des lignes bus (data.strasbourg.eu) → reste sur la route.
+    const r=snapBus(pos[0],pos[1]);
+    if(r) pos=r;
+    else { // pas encore de géométrie chargée → au moins aimanter aux arrêts proches
+      if(p.ps && distM(pos,p.ps)<MOVE.stopSnapM) pos=[p.ps.lat,p.ps.lng];
+      else if(p.ns && distM(pos,p.ns)<MOVE.stopSnapM) pos=[p.ns.lat,p.ns.lng];
+    }
+  }
+  return {pos,ns:p.ns,ps:p.ps};
+}
+
+/* (re)construit marqueurs + popups + compteurs depuis le cache (toutes les 15s) */
+function renderVehicles(){
+  const now=Date.now(), seen=new Set();
+  let nT=0,nB=0;
+  for(const j of St.journeys){
+    const t=vehTarget(j,now); if(!t) continue;
+    if(j.mode==="tram") nT++; else nB++;
+    if(j.mode==="tram"&&!St.show.tram) continue;
+    if(j.mode==="bus" &&!St.show.bus)  continue;
+    seen.add(j.key);
+    upsertVeh(j,t,now,true);
+  }
+  St.veh.forEach((m,k)=>{if(!seen.has(k)){St.lVeh.removeLayer(m);St.veh.delete(k);}});
+  document.getElementById("cnt-tram").textContent=nT;
+  document.getElementById("cnt-bus").textContent=nB;
+}
+
+/* lissage doux borné en vitesse (mètres/tick) → suit le planning sans téléport ni streak */
+function smoothStep(cur,tgt,maxM){
+  let sy=(tgt[0]-cur[0])*MOVE.alpha, sx=(tgt[1]-cur[1])*MOVE.alpha;
+  const my=sy*M_PER_DEG, mx=sx*M_PER_DEG*COSLAT, mag=Math.hypot(my,mx);
+  if(mag>maxM){ const f=maxM/mag; sy*=f; sx*=f; }
+  return [cur[0]+sy, cur[1]+sx];
+}
+/* TICK 0,5s : suivi temporel lissé.
+   - jamais de téléport (vitesse plafonnée à une allure urbaine réaliste)
+   - jamais de recul brutal : si la cible s'éloigne du prochain arrêt (prédiction qui glisse
+     entre 2 refresh), le véhicule ATTEND au lieu de reculer — sauf vrai re-routage. */
+function tickVehicles(){
+  if(!St.journeys.length) return;
+  const now=Date.now();
+  for(const j of St.journeys){
+    const m=St.veh.get(j.key); if(!m) continue;
+    const t=vehTarget(j,now); if(!t) continue;
+    const tgt=t.pos;
+    let cur=St.vpos.get(j.key)||[tgt[0],tgt[1]];
+    const maxM=MOVE.maxM[j.mode]||MOVE.maxM.bus;
+    if(t.ns){
+      const dCur=distM(cur,t.ns), dTgt=distM(tgt,t.ns);
+      if(dTgt>dCur+MOVE.holdSlackM && distM(cur,tgt)<MOVE.rerouteM){
+        St.vpos.set(j.key,cur); m.setLatLng(cur); continue;   // recul détecté → on patiente
+      }
+    }
+    cur=smoothStep(cur,tgt,maxM);
+    if(distM(cur,tgt)<0.6) cur=[tgt[0],tgt[1]];               // arrivé : on colle (sub-métrique)
+    St.vpos.set(j.key,cur);
+    m.setLatLng(cur);
+  }
+}
+
+/* TRAM = étiquette lettre colorée seule. BUS = petit bus CTS cyan + n° (busMarkerSVG défini + bas, livrée Chron'hop). */
+function mkVehHTML(line,mode,color){
+  if(mode==="tram")
+    return '<div class="vtram" style="background:'+color+'">'+esc(line||"?")+'</div>';
+  return '<div class="vmoji bus">'+busMarkerSVG()
+       + '<span class="vln" style="background:'+color+'">'+esc(line||"?")+'</span></div>';
+}
+function upsertVeh(j,t,now,rebuild){
+  const color=lc(j.line,j.mode);
+  let m=St.veh.get(j.key);
+  if(!m){
+    const tram=j.mode==="tram";
+    const icon=L.divIcon({className:"vwrap",html:mkVehHTML(j.line,j.mode,color),
+      iconSize: tram?[34,26]:[40,42], iconAnchor: tram?[17,13]:[20,34]});
+    m=L.marker(t.pos,{icon,riseOnHover:true,zIndexOffset:600});
+    m.addTo(St.lVeh); St.veh.set(j.key,m);
+    if(!St.vpos.get(j.key)) St.vpos.set(j.key,[t.pos[0],t.pos[1]]);
+    m._key=j.key;
+    m.on("click",()=>openVehModal(m._key));   // → fiche détaillée plein format
+  }
+  m._key=j.key;
+}
+
+/* Fiche VÉHICULE complète (toutes les infos techniques) */
+function openVehModal(key){
+  const j=St.jmap.get(key); if(!j) return;
+  St.modalVeh=key; St.modalRef=null;
+  St.shareCtx={type:"veh",line:j.line,dest:j.dest,mode:j.mode};
+  const now=Date.now(), t=vehTarget(j,now), ns=t?t.ns:null;
+  const color=lc(j.line,j.mode);
+  const mins=ns?Math.max(0,Math.round((ns.t-now)/60000)):null;
+  const delay=(ns&&ns.at)?Math.round((ns.t-ns.at)/60000):null;
+  const dlyTxt = delay===null?"—" : delay<=0?'<span class="ontime">à l\'heure</span>' : '<span class="late">+'+delay+' min</span>';
+  document.getElementById("m-illu").innerHTML=busRoadHTML({banner:true,color:color,cap:(j.mode==="tram"?"Tram ":"Bus ")+esc(j.line||"?")});
+  document.getElementById("m-ey").textContent=j.mode==="tram"?"Tramway CTS":"Bus CTS";
+  document.getElementById("m-ref").textContent="Ligne "+esc(j.line||"?");
+  document.getElementById("m-name").textContent="→ "+esc(j.dest||"—");
+  document.getElementById("m-lines").innerHTML='<span class="lchip" style="background:'+color+'">'+esc(j.line||"?")+'</span>'
+    +'<span class="lchip" style="background:rgba(255,255,255,.1);color:#cfe0f5">'+(j.mode==="tram"?"🚊 Tramway":"🚌 Bus")+'</span>';
+  const R=(k,v)=> v&&v!=="—" ? '<div class="vd-row"><span class="k">'+k+'</span><span class="v">'+v+'</span></div>' : "";
+  document.getElementById("m-body").innerHTML='<div class="vd-grid">'
+    + R("N° de ligne", esc(j.line||"?"))
+    + R("Type", j.mode==="tram"?"Tramway":"Autobus")
+    + R("Destination", esc(j.dest))
+    + R("Direction", esc(j.dirName)||(j.dir?"sens "+esc(j.dir):""))
+    + R("Origine", esc(j.origin))
+    + R("Terminus", esc(j.term))
+    + (ns?R("Prochain arrêt", esc(ns.name)):"")
+    + (ns?R("Arrivée estimée", mins===0?"imminent":mins+" min"):"")
+    + R("Ponctualité", dlyTxt)
+    + R("N° de véhicule", j.vref?"n° "+esc(j.vref):"")
+    + R("Exploitant", esc(j.oper)||"CTS")
+    + R("Réf. course", esc(j.jname))
+    + R("Suivi temps réel", j.monitored==="false"?"non":"oui")
+    + '<div class="vpest" style="margin:12px 0 0">◆ Position estimée en direct'+(j.mode==="tram"?" · calée sur les rails":"")+' — l\'API CTS ne diffuse pas le GPS véhicule. Horaires & retards = données SIRI réelles.</div>'
+    + '</div>';
+  document.getElementById("dep-refresh").style.display="none";
+  document.getElementById("modal-bg").classList.add("show");
+}
+
+/* ════════ RÉSEAU TRAM (tracé officiel data.strasbourg.eu) ════════ */
+const COSLAT=Math.cos(48.58*Math.PI/180);
+function sampleLine(ll,out,step){
+  for(let i=0;i<ll.length-1;i++){
+    const a=ll[i],b=ll[i+1]; out.push(a);
+    const dLat=b[0]-a[0],dLng=b[1]-a[1],dist=Math.hypot(dLat,dLng),n=Math.floor(dist/step);
+    for(let k=1;k<n;k++) out.push([a[0]+dLat*k/n,a[1]+dLng*k/n]);
+  }
+  if(ll.length) out.push(ll[ll.length-1]);
+}
+function snapTram(lat,lng){
+  const P=St.tramPts; if(!P.length) return null;
+  let bd=Infinity,best=null;
+  for(let i=0;i<P.length;i++){
+    const p=P[i],dy=p[0]-lat,dx=(p[1]-lng)*COSLAT,d=dy*dy+dx*dx;
+    if(d<bd){bd=d;best=p;}
+  }
+  const TH=0.0014; // ~150 m : un tram est TOUJOURS sur les rails → on force le calage même en courbe/segment long
+  return (best&&bd<TH*TH)?best:null;
+}
+function classifyTramStops(){
+  const P=St.tramPts; if(!P.length) return;
+  const TH=0.00045; // ~50 m d'un rail = arrêt tram
+  St.stops.forEach(s=>{
+    let bd=Infinity;
+    for(let i=0;i<P.length;i+=2){ const p=P[i],dy=p[0]-s.lat,dx=(p[1]-s.lng)*COSLAT,d=dy*dy+dx*dx; if(d<bd)bd=d; }
+    s.tram = bd<TH*TH;
+  });
+}
+const TRAM_PAL={A:"#E2001A",B:"#009FE3",C:"#F39200",D:"#50AF31",E:"#A04199",F:"#E5007D"};
+function tramColor(props){
+  for(const k in props){
+    const v=(""+props[k]).trim().toUpperCase();
+    if(/^[A-F]$/.test(v)) return TRAM_PAL[v];
+    const m=v.match(/(?:LIGNE|TRAM)\s*([A-F])\b/);
+    if(m) return TRAM_PAL[m[1]];
+  }
+  return "#E2001A";
+}
+async function loadTramNetwork(){
+  const urls=[
+    "https://data.strasbourg.eu/api/explore/v2.1/catalog/datasets/lignes_tram/exports/geojson",
+    "https://data.strasbourg.eu/api/records/1.0/download/?dataset=lignes_tram&format=geojson"
+  ];
+  let gj=null;
+  for(const u of urls){ try{ const r=await fetch(u); if(r.ok){ gj=await r.json(); break; } }catch(e){} }
+  if(!gj||!gj.features){ console.warn("[STRASS] tracé tram indisponible"); return; }
+  St.tramLines=[];   // {ll,color} réutilisé par la mini-map
+  const add=(co,color)=>{ const ll=co.map(c=>[c[1],c[0]]); St.tramLines.push({ll,color}); };
+  for(const f of gj.features){
+    const g=f.geometry; if(!g) continue;
+    const color=tramColor(f.properties||{});
+    if(g.type==="LineString") add(g.coordinates,color);
+    else if(g.type==="MultiLineString") g.coordinates.forEach(c=>add(c,color));
+  }
+  if(!St.tramLines.length) return;
+  St.tramLines.forEach(t=>L.polyline(t.ll,{pane:"tramline",color:t.color,weight:2.2,opacity:.9,interactive:false}).addTo(St.lTram));
+  St.tramPts=[];
+  St.tramLines.forEach(t=>sampleLine(t.ll,St.tramPts,0.00012)); // échantillon ~13 m pour le snapping
+  classifyTramStops();
+  drawStops();
+  if(St.mini) drawMiniTram();   // dessine aussi sur la mini-map si prête
+  if(St.lmini) drawLandingTram();   // ... et sur la mini-carte de la page d'accueil
+}
+
+/* ════════ RÉSEAU BUS (tracé filaire officiel data.strasbourg.eu) ════════
+   But : caler chaque bus sur la VRAIE route de son réseau (comme les trams sur les rails),
+   pour qu'aucun bus ne s'affiche dans un immeuble/parc. Indexation par GRILLE pour rester
+   ultra-rapide même avec ~400 bus rafraîchis toutes les 0,5 s. */
+const BUS_CELL=0.0012;   // ~110 m : taille de cellule de la grille spatiale
+function buildBusGrid(points){
+  const g=new Map();
+  for(const p of points){
+    const k=((p[0]/BUS_CELL)|0)+":"+((p[1]/BUS_CELL)|0);
+    let a=g.get(k); if(!a){a=[];g.set(k,a);} a.push(p);
+  }
+  return g;
+}
+function snapBus(lat,lng){
+  const g=St.busGrid; if(!g) return null;
+  const ci=(lat/BUS_CELL)|0, cj=(lng/BUS_CELL)|0;
+  let bd=Infinity,best=null;
+  for(let di=-1;di<=1;di++) for(let dj=-1;dj<=1;dj++){
+    const a=g.get((ci+di)+":"+(cj+dj)); if(!a) continue;
+    for(let i=0;i<a.length;i++){
+      const p=a[i],dy=(p[0]-lat),dx=(p[1]-lng)*COSLAT,d=dy*dy+dx*dx;
+      if(d<bd){bd=d;best=p;}
+    }
+  }
+  const TH=0.0009; // ~95 m : on cale le bus sur la route bus la plus proche
+  return (best&&bd<TH*TH)?best:null;
+}
+async function loadBusNetwork(){
+  const urls=[
+    "https://data.strasbourg.eu/api/explore/v2.1/catalog/datasets/lignes_de_bus/exports/geojson",
+    "https://data.strasbourg.eu/api/records/1.0/download/?dataset=lignes_de_bus&format=geojson"
+  ];
+  let gj=null;
+  for(const u of urls){ try{ const r=await fetch(u); if(r.ok){ gj=await r.json(); break; } }catch(e){} }
+  if(!gj||!gj.features){ console.warn("[STRASS] tracé bus indisponible — fallback arrêts"); return; }
+  const pts=[];
+  for(const f of gj.features){
+    const g=f.geometry; if(!g) continue;
+    const push=co=>sampleLine(co.map(c=>[c[1],c[0]]),pts,0.00025); // échantillon ~28 m
+    if(g.type==="LineString") push(g.coordinates);
+    else if(g.type==="MultiLineString") g.coordinates.forEach(push);
+  }
+  if(!pts.length){ console.warn("[STRASS] géométrie bus vide"); return; }
+  St.busPts=pts;
+  St.busGrid=buildBusGrid(pts);
+  console.log("[STRASS] tracé bus chargé :",pts.length,"points (snap actif)");
+}
+
+/* ── P+R ── */
+async function loadPR(){
+  let data; try{data=await Api.pr();}catch(e){toast("P+R: "+e.message);return;}
+  let arr=[];
+  const scan=o=>{if(Array.isArray(o)&&o.length&&typeof o[0]==="object"){arr=o;return;}if(o&&typeof o==="object")for(const k in o)scan(o[k]);};
+  scan(data);
+  St.lPr.clearLayers();
+  let n=0;
+  arr.forEach(p=>{
+    const lat=parseFloat(p.latitude??p.Latitude??p.location?.latitude);
+    const lng=parseFloat(p.longitude??p.Longitude??p.location?.longitude);
+    const name=txt(p.name||p.Name||p.label||"P+R");
+    const free=p.available??p.free??p.placesDisponibles??p.availableSpaces;
+    const cap=p.total??p.capacity??p.capaciteMax;
+    if(isNaN(lat)||isNaN(lng)) return;
+    n++;
+    const icon=L.divIcon({className:"vwrap",iconSize:[32,32],iconAnchor:[16,16],
+      html:'<div style="width:30px;height:30px;border-radius:10px;background:#1fd99a;color:#04140d;display:grid;place-items:center;font-family:var(--fd);font-weight:900;font-size:14px;border:2px solid #fff;box-shadow:0 3px 12px rgba(0,0,0,.5);letter-spacing:0">P</div>'});
+    const m=L.marker([lat,lng],{icon,zIndexOffset:400});
+    m.bindPopup('<div class="vph"><span class="vpb" style="background:#1fd99a;color:#04140d">P+R</span><span class="vpd">'+esc(name)+'</span></div>'
+      +(free!=null?'<div class="vpr"><span class="k">Places libres</span><span class="v">'+esc(String(free))+(cap!=null?' / '+cap:'')+'</span></div>':''));
+    St.lPr.addLayer(m);
+  });
+  toast(n+" parkings-relais chargés");
+}
+
+/* ── MODAL ARRÊT (horaires réels stop-monitoring) ── */
+function openModal(s){
+  St.modalRef=s.ref; St.modalVeh=null;
+  St.shareCtx={type:"stop",name:s.name,ref:s.ref};
+  if(St.map && St.curView==="map" && St.map.getZoom()<16) St.map.setView([s.lat,s.lng],17,{animate:true});
+  document.getElementById("m-illu").innerHTML=busStopHTML(s.tram?"#E2001A":"#27d3ff");
+  document.getElementById("m-ey").textContent="Arrêt CTS";
+  document.getElementById("dep-refresh").style.display="";
+  document.getElementById("m-name").textContent=s.name;
+  document.getElementById("m-ref").textContent=s.ref;
+  document.getElementById("m-lines").innerHTML=s.lines.map(l=>{
+    const c=lc(l,null);
+    return '<span class="lchip" style="background:'+c+'">'+esc(l)+'</span>';
+  }).join("");
+  document.getElementById("m-body").innerHTML='<div class="dep-load"><div class="sp"></div>Chargement en temps réel…</div>';
+  document.getElementById("dep-refresh").textContent="";
+  document.getElementById("modal-bg").classList.add("show");
+  fetchModal(s);
+}
+async function fetchModal(s){
+  const pull=async(ref)=>{
+    const d=await Api.sm(ref);
+    const dels=firstD(d,"StopMonitoringDelivery");
+    let visits=[];
+    for(const x of dels) visits=visits.concat(asA(x.MonitoredStopVisit||x));
+    return visits;
+  };
+  let visits;
+  try{
+    visits=await pull(s.ref);                                   // code logique "100"
+    if((!visits||!visits.length) && s.code && s.code!==s.ref)
+      visits=await pull(s.code);                                // fallback quai "100C"
+  }catch(e){
+    document.getElementById("m-body").innerHTML='<div class="dep-empty">Erreur : '+esc(e.message)+'</div>';return;
+  }
+  if(St.modalRef!==s.ref) return;
+  const now=Date.now();
+  const rows=visits.map(v=>{
+    const j=v.MonitoredVehicleJourney||v.monitoredVehicleJourney||{};
+    const call=j.MonitoredCall||j.monitoredCall||{};
+    const line=txt(j.PublishedLineName)||txt(j.LineRef);
+    const dest=txt(j.DestinationName)||txt(j.DirectionName)||txt(call.DestinationDisplay)||"—";
+    const modeR=txt(j.VehicleMode).toLowerCase();
+    const mode=(/^[A-F]$/.test(line.trim().toUpperCase())||modeR.includes("tram"))?"tram":"bus";
+    const exp=Date.parse(txt(call.ExpectedDepartureTime)||txt(call.ExpectedArrivalTime)||"");
+    const aim=Date.parse(txt(call.AimedDepartureTime)||txt(call.AimedArrivalTime)||"");
+    const t=!isNaN(exp)?exp:aim;
+    const rt=!isNaN(exp);
+    const delay=(!isNaN(exp)&&!isNaN(aim))?Math.round((exp-aim)/60000):null;
+    const vref=txt(j.VehicleRef);
+    return isNaN(t)?null:{line,dest,mode,t,rt,delay,vref};
+  }).filter(Boolean).sort((a,b)=>a.t-b.t);
+
+  if(!rows.length){document.getElementById("m-body").innerHTML='<div class="dep-empty">Aucun passage annoncé<br><small>Fin de service ou pas de données</small></div>';return;}
+
+  document.getElementById("m-body").innerHTML=rows.map(r=>{
+    const c=lc(r.line,r.mode);
+    const mins=Math.max(0,Math.round((r.t-now)/60000));
+    const hr=new Date(r.t).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});
+    const soon=mins<=2;
+    const mText=mins===0?'<span class="mn soon"><small>à quai</small></span>'
+                        :'<span class="mn'+(soon?" soon":"")+'">'+mins+' <small>min</small></span>';
+    const dly = r.delay===null ? "" :
+      (r.delay<=0?'<span class="dly ok">à l\'heure</span>':'<span class="dly bad">+'+r.delay+' min</span>');
+    return '<div class="dep">'
+      +'<div class="ln" style="background:'+c+'">'+esc(r.line||"?")+'</div>'
+      +'<div class="mid"><div class="dn">→ '+esc(r.dest)+'</div>'
+      +'<div class="dm"><span class="dbadge '+(r.rt?"rt":"th")+'">'+(r.rt?"temps réel":"théorique")+'</span>'
+      +esc(r.mode==="tram"?"Tramway":"Bus")+dly+(r.vref?' · véh. '+esc(r.vref):"")+'</div></div>'
+      +'<div class="right">'+mText+'<div class="hr">'+hr+'</div></div></div>';
+  }).join("");
+  document.getElementById("dep-refresh").textContent="Mis à jour à "+new Date().toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+
+  // Tarifs CTS (indicatifs) — billets utilisables sur cet arrêt
+  const fares=document.createElement("div");
+  fares.className="dep-fares";
+  fares.innerHTML='<div class="df-h">🎟️ Billets CTS <span>indicatif</span></div>'
+    +'<div class="df-row"><span>Aller simple (valable 1h30)</span><b>~2,10 €</b></div>'
+    +'<div class="df-row"><span>24h solo · trajets illimités</span><b>4,60 €</b></div>'
+    +'<div class="df-row"><span>Carnet 10 voyages / abonnements</span><b>voir CTS</b></div>'
+    +'<a class="df-link" href="https://www.cts-strasbourg.fr/fr/Titres-de-transport/tarifs/Tickets/" target="_blank" rel="noopener">Tous les tarifs sur cts-strasbourg.fr →</a>';
+  document.getElementById("m-body").appendChild(fares);
+
+  // Propose d'ajouter en favori si pas déjà là
+  const isFav=St.favs.some(f=>f.ref===s.ref);
+  const favEl=document.createElement("div");
+  favEl.style.cssText="padding:8px 20px 14px;text-align:center";
+  favEl.innerHTML=isFav
+    ?'<button onclick="removeFav(\''+esc(s.ref)+'\')" style="background:rgba(226,0,26,.1);border:1px solid rgba(226,0,26,.3);color:#ff5e72;padding:8px 20px;border-radius:10px;font-size:12px;cursor:pointer">⭐ Retirer des favoris</button>'
+    :'<button onclick="addFav(\''+esc(s.ref)+'\',\''+esc(s.name)+'\')" style="background:rgba(39,211,255,.1);border:1px solid rgba(39,211,255,.3);color:var(--cyan);padding:8px 20px;border-radius:10px;font-size:12px;cursor:pointer">☆ Ajouter aux favoris</button>';
+  document.getElementById("m-body").appendChild(favEl);
+}
+function closeModal(){document.getElementById("modal-bg").classList.remove("show");St.modalRef=null;St.modalVeh=null;}
+
+/* ── COMPTE UTILISATEUR (localStorage, Supabase à venir) ── */
+function loadUser(){
+  let u={}; try{u=JSON.parse(localStorage.getItem("sg_user")||"{}");}catch(e){}
+  const set=(id,v)=>{const e=document.getElementById(id); if(e)e.value=v||"";};
+  set("acc-first",u.first); set("acc-last",u.last); set("acc-email",u.email);
+  set("acc-phone",u.phone); set("acc-city",u.city);
+  paintUser(u);
+}
+function paintUser(u){
+  const disp=document.getElementById("acc-disp"), mail=document.getElementById("acc-dispmail"), ava=document.getElementById("acc-ava");
+  const full=((u.first||"")+" "+(u.last||"")).trim();
+  if(disp) disp.textContent=full||"Voyageur";
+  if(mail) mail.textContent=u.email||"Renseigne ton profil ci-dessous";
+  if(ava)  ava.textContent=(u.first?u.first[0]:"🙂").toUpperCase?.()||"🙂";
+  if(ava&&u.first) ava.textContent=(u.first[0]+(u.last?u.last[0]:"")).toUpperCase();
+}
+function saveUser(){
+  const g=id=>{const e=document.getElementById(id);return e?e.value.trim():"";};
+  const u={first:g("acc-first"),last:g("acc-last"),email:g("acc-email"),phone:g("acc-phone"),city:g("acc-city")};
+  if(u.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(u.email)){ toast("Email invalide"); return; }
+  try{localStorage.setItem("sg_user",JSON.stringify(u));}catch(e){}
+  paintUser(u);
+  toast("✅ Profil enregistré");
+}
+
+/* ── FAVORIS ── */
+function loadFavs(){try{const s=localStorage.getItem("sc_favs");if(s)St.favs=JSON.parse(s);}catch(e){}}
+function saveFavs(){try{localStorage.setItem("sc_favs",JSON.stringify(St.favs));}catch(e){}}
+function addFav(ref,name){
+  if(!St.favs.some(f=>f.ref===ref)){St.favs.push({ref,name,alert:true});saveFavs();updateFavBadge();renderFavs();toast("⭐ "+name+" ajouté · 🔔 alertes activées");closeModal();try{if(("Notification" in window)&&Notification.permission==="default"&&typeof ensureNotifPerm==="function")ensureNotifPerm();}catch(e){}try{checkFavAlerts();}catch(e){}}
+}
+function removeFav(ref){St.favs=St.favs.filter(f=>f.ref!==ref);saveFavs();updateFavBadge();renderFavs();toast("Retiré des favoris");}
+function updateFavBadge(){
+  const b=document.getElementById("fav-badge");
+  if(St.favs.length>0){b.textContent=St.favs.length;b.classList.add("show");}else b.classList.remove("show");
+}
+async function renderFavs(){
+  const wrap=document.getElementById("fav-wrap");
+  if(!St.favs.length){
+    wrap.innerHTML='<div class="fav-empty"><div class="fe-ico"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div><h3>Aucun favori</h3><p>Clique sur un arrêt sur la carte ou dans la recherche, puis ajoute-le à tes favoris pour accéder rapidement à ses horaires.</p></div>';
+    return;
+  }
+  wrap.innerHTML='<div class="fav-section"><div class="fav-stitle">Tes arrêts favoris</div>'
+    +St.favs.map(f=>'<div class="fav-card">'
+      +'<div class="fav-card-h" onclick="openFavStop(\''+esc(f.ref)+'\',\''+esc(f.name)+'\')">'
+      +'<span class="fco"><svg viewBox="0 0 24 24"><circle cx="12" cy="10" r="3"/><path d="M12 2a8 8 0 0 0-8 8c0 5 8 12 8 12s8-7 8-12a8 8 0 0 0-8-8z"/></svg></span>'
+      +'<span class="fn">'+esc(f.name)+'</span>'
+      +'<span class="fbell'+(f.alert?' on':'')+'" title="M\'alerter quand le bus arrive" onclick="event.stopPropagation();toggleFavAlert(\''+esc(f.ref)+'\')">'
+        +'<svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span>'
+      +'<span class="fdel" onclick="event.stopPropagation();removeFav(\''+esc(f.ref)+'\')">×</span>'
+      +'</div><div class="fav-deps" id="fav-deps-'+esc(f.ref)+'"><div style="padding:4px 6px;font-size:11px;color:var(--dim)">Clic pour voir les horaires…</div></div>'
+      +'</div>').join("")+'</div>';
+}
+function openFavStop(ref,name){
+  const s=St.stops.get(ref)||{ref,name,lat:0,lng:0,lines:[]};
+  openModal(s);
+}
+async function refreshFavsDeps(){
+  if(!St.favs.length) return;
+  const now=Date.now();
+  for(const f of St.favs){
+    const el=document.getElementById("fav-deps-"+f.ref);
+    if(!el) continue;
+    try{
+      const data=await Api.sm(f.ref);
+      const dels=firstD(data,"StopMonitoringDelivery");
+      let visits=[];
+      for(const d of dels) visits=visits.concat(asA(d.MonitoredStopVisit||d));
+      const rows=visits.map(v=>{
+        const j=v.MonitoredVehicleJourney||v.monitoredVehicleJourney||{};
+        const call=j.MonitoredCall||j.monitoredCall||{};
+        const line=txt(j.PublishedLineName)||txt(j.LineRef);
+        const dest=txt(j.DestinationName)||txt(j.DirectionName)||"—";
+        const modeR=txt(j.VehicleMode).toLowerCase();
+        const mode=modeR.includes("tram")?"tram":"bus";
+        const exp=Date.parse(txt(call.ExpectedDepartureTime)||txt(call.ExpectedArrivalTime)||"");
+        const aim=Date.parse(txt(call.AimedDepartureTime)||txt(call.AimedArrivalTime)||"");
+        const t=!isNaN(exp)?exp:aim;
+        return isNaN(t)?null:{line,dest,mode,t,rt:!isNaN(exp)};
+      }).filter(Boolean).sort((a,b)=>a.t-b.t).slice(0,4);
+      el.innerHTML=rows.length
+        ?rows.map(r=>{
+          const c=lc(r.line,r.mode);
+          const mins=Math.max(0,Math.round((r.t-now)/60000));
+          const soon=mins<=2;
+          return '<div class="fdep">'
+            +'<div class="fl"><div class="fln" style="background:'+c+'">'+esc(r.line)+'</div><span class="fdd">'+esc(r.dest)+'</span></div>'
+            +'<div class="fdm'+(soon?" soon":"")+'">'+mins+' <small>min</small></div>'
+            +'</div>';
+        }).join("")
+        :'<div style="padding:4px 6px;font-size:11px;color:var(--dim)">Pas de passage annoncé</div>';
+    }catch(e){el.innerHTML='<div style="padding:4px 6px;font-size:11px;color:var(--red)">Erreur API</div>';}
+  }
+}
+
+/* ── RECHERCHE ── */
+function bindSearch(){
+  const inp=document.getElementById("search-inp"), res=document.getElementById("search-results");
+  if(!inp||!res) return;
+  res.innerHTML=SEARCH_EMPTY;
+  inp.addEventListener("input",e=>renderSearch(e.target.value,res,40));
+}
+function onSearchHit(ref){
+  const s=St.stops.get(ref);
+  if(!s){toast("Arrêt introuvable");return;}
+  switchView("map");
+  St.map.setView([s.lat,s.lng],17);
+  openModal(s);
+  ["search-inp","home-inp"].forEach(id=>{const e=document.getElementById(id);if(e)e.value="";});
+  const hr=document.getElementById("home-results"); if(hr) hr.innerHTML="";
+}
+
+/* ── UI / STATUS ── */
+function setStatus(ok,sub){
+  const dot=document.getElementById("dot-status"),txt2=document.getElementById("txt-status");
+  if(dot) dot.className="dot"+(ok?"":" err");
+  if(txt2) txt2.textContent=ok?"Connecté":"Hors-ligne";
+  St.apiOk=ok;
+  const big=document.getElementById("api-big-ico"),bl=document.getElementById("api-big-label"),bs=document.getElementById("api-big-sub");
+  if(big) big.className="api-big-icon"+(ok?"":" err");
+  if(bl) bl.textContent=ok?"API CTS connectée":"Erreur de connexion";
+  if(bs) bs.textContent=sub||"api.cts-strasbourg.eu";
+}
+
+/* ── COUNTDOWN ── */
+/* ════════ ILLUSTRATIONS ANIMÉES (SVG cartoon) ════════ */
+/* roue pro : pneu sombre + jante chromée + rayons (le <g class="br-wheel"> tourne) */
+function busWheel(cx,cy){
+  return '<circle cx="'+cx+'" cy="'+cy+'" r="16" fill="#10141b"/>'
+   +'<g class="br-wheel">'
+   +'<circle cx="'+cx+'" cy="'+cy+'" r="16" fill="none" stroke="#2a3645" stroke-width="5"/>'
+   +'<circle cx="'+cx+'" cy="'+cy+'" r="6" fill="#aebdcd"/>'
+   +'<g stroke="#d6e2ee" stroke-width="2" stroke-linecap="round">'
+   +'<line x1="'+cx+'" y1="'+(cy-12)+'" x2="'+cx+'" y2="'+(cy+12)+'"/>'
+   +'<line x1="'+(cx-12)+'" y1="'+cy+'" x2="'+(cx+12)+'" y2="'+cy+'"/>'
+   +'<line x1="'+(cx-8.5).toFixed(1)+'" y1="'+(cy-8.5).toFixed(1)+'" x2="'+(cx+8.5).toFixed(1)+'" y2="'+(cy+8.5).toFixed(1)+'"/>'
+   +'<line x1="'+(cx-8.5).toFixed(1)+'" y1="'+(cy+8.5).toFixed(1)+'" x2="'+(cx+8.5).toFixed(1)+'" y2="'+(cy-8.5).toFixed(1)+'"/>'
+   +'</g></g>';
+}
+function busSVG(body,glass){
+  // Livrée CTS "Chron'hop" : cyan en haut, bas de caisse blanc, vague bleu clair, bandeau vitré noir.
+  body=body||"#16a8dd"; glass=glass||"#0c1a24";
+  const u='b'+Math.random().toString(36).slice(2,7);
+  return '<svg viewBox="0 0 260 132" xmlns="http://www.w3.org/2000/svg">'
+   +'<defs>'
+   +'<linearGradient id="'+u+'body" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5fcdf0"/><stop offset=".42" stop-color="'+body+'"/><stop offset="1" stop-color="#0e84b4"/></linearGradient>'
+   +'<linearGradient id="'+u+'head" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff7d2"/><stop offset="1" stop-color="#ffcb33"/></linearGradient>'
+   +'</defs>'
+   +'<ellipse cx="132" cy="120" rx="98" ry="9" fill="rgba(0,0,0,.30)"/>'                                  /* ombre */
+   +'<rect x="22" y="30" width="214" height="62" rx="16" fill="#f4f8fb"/>'                                  /* caisse blanche (bas) */
+   +'<path d="M22 46 q0 -16 16 -16 h182 q16 0 16 16 v20 q-110 26 -214 4 z" fill="url(#'+u+'body)"/>'        /* haut cyan */
+   +'<path d="M22 60 q120 22 214 -2 v8 q-104 22 -214 2 z" fill="#bfe9fb" opacity=".75"/>'                   /* vague bleu clair */
+   +'<rect x="22" y="30" width="214" height="9" rx="8" fill="#ffffff" opacity=".5"/>'                       /* reflet toit */
+   +'<rect x="34" y="40" width="150" height="22" rx="6" fill="'+glass+'"/>'                                 /* bandeau vitres noir */
+   +'<rect x="73" y="40" width="2.5" height="22" fill="#2b4a5c" opacity=".6"/>'
+   +'<rect x="112" y="40" width="2.5" height="22" fill="#2b4a5c" opacity=".6"/>'
+   +'<rect x="151" y="40" width="2.5" height="22" fill="#2b4a5c" opacity=".6"/>'
+   +'<polygon points="44,40 66,40 48,62 30,62" fill="rgba(255,255,255,.16)"/>'                              /* reflet vitre */
+   +'<path d="M192 40 h12 a6 6 0 0 1 6 6 v16 h-18 z" fill="'+glass+'"/>'                                     /* pare-brise */
+   +'<polygon points="196,40 202,40 198,62 192,62" fill="rgba(255,255,255,.14)"/>'
+   +'<rect x="128" y="40" width="2.5" height="48" rx="1" fill="#9fb6c2" opacity=".7"/>'                      /* joint porte */
+   +'<rect x="223" y="70" width="12" height="9" rx="3" fill="url(#'+u+'head)"/>'                             /* phare */
+   +'<rect x="214" y="84" width="22" height="5" rx="2.5" fill="#d7e2ea"/>'                                   /* bouclier */
+   +busWheel(72,92)+busWheel(196,92)
+   +'</svg>';
+}
+/* version simplifiée (petit marqueur carte) — même livrée cyan/blanc */
+function busMarkerSVG(){
+  return '<svg class="vbus" viewBox="0 0 54 34" xmlns="http://www.w3.org/2000/svg">'
+   +'<defs><linearGradient id="vbg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#56c7ee"/><stop offset=".5" stop-color="#16a8dd"/><stop offset="1" stop-color="#0e84b4"/></linearGradient></defs>'
+   +'<rect x="3" y="4" width="48" height="22" rx="6" fill="#f4f8fb" stroke="#0c2e3e" stroke-width="2"/>'      /* caisse blanche */
+   +'<path d="M3 13 q0 -9 9 -9 h33 q6 0 6 6 v8 q-27 7 -48 1 z" fill="url(#vbg)"/>'                            /* haut cyan */
+   +'<rect x="7" y="8" width="30" height="8" rx="2.5" fill="#0c1a24"/>'                                       /* vitres noires */
+   +'<rect x="43" y="9" width="5" height="6" rx="1.5" fill="#ffe27a"/>'                                       /* phare */
+   +'<circle cx="15" cy="27" r="5" fill="#0a0d12"/><circle cx="15" cy="27" r="2" fill="#7e93aa"/>'
+   +'<circle cx="39" cy="27" r="5" fill="#0a0d12"/><circle cx="39" cy="27" r="2" fill="#7e93aa"/>'
+   +'</svg>';
+}
+function busRoadHTML(opt){
+  opt=opt||{};
+  return '<div class="busroad'+(opt.banner?" banner":"")+'">'
+    + '<div class="br-sky-glow"></div>'
+    + '<div class="br-skyline"></div>'
+    + '<div class="br-speed"><i></i><i></i><i></i></div>'
+    + (opt.cap?'<div class="br-cap">'+opt.cap+'</div>':"")
+    + '<div class="br-bus">'+busSVG(opt.color,opt.glass)+'</div>'
+    + '<div class="br-road"><div class="br-edge"></div><div class="br-dash"></div></div>'
+    + '</div>';
+}
+function busStopHTML(color){
+  color=color||"#27d3ff";
+  return '<div class="busstop">'
+    + '<div class="bs-sun"></div><div class="bs-ground"></div>'
+    + '<div class="bs-shelter"><svg viewBox="0 0 100 70">'
+    +   '<rect x="6" y="8" width="80" height="9" rx="4" fill="#9fb3c8"/>'
+    +   '<rect x="10" y="17" width="5" height="46" fill="#7e93aa"/><rect x="78" y="17" width="5" height="46" fill="#7e93aa"/>'
+    +   '<rect x="20" y="34" width="52" height="26" rx="3" fill="rgba(255,255,255,.12)" stroke="#9fb3c8" stroke-width="2"/>'
+    +   '<rect x="88" y="6" width="10" height="40" fill="#5b6b80"/><circle cx="93" cy="14" r="9" fill="#27d3ff"/><text x="93" y="18" font-size="10" text-anchor="middle" fill="#04121e" font-family="sans-serif" font-weight="bold">🚍</text>'
+    + '</svg></div>'
+    + '<div class="bs-bus">'+busSVG(color)+'</div>'
+    + '</div>';
+}
+function skeletonHTML(n){
+  let s=""; for(let i=0;i<(n||4);i++) s+='<div class="skel"><div class="b s1"></div><div style="flex:1"><div class="b s2" style="margin-bottom:7px"></div><div class="b s3"></div></div><div class="b s3"></div></div>';
+  return s;
+}
+const SEARCH_EMPTY=busRoadHTML({cap:"En route… cherche ton arrêt 🚌"});
+const HOME_HINT='<div class="home-hint">Tape un nom d\'arrêt CTS — ex&nbsp;: <b>Homme de Fer</b>, <b>Gare Centrale</b>, <b>Étoile Bourse</b>…</div>';
+
+
+function searchStops(q){
+  q=q.trim().toLowerCase(); if(q.length<2) return null;
+  const hits=[]; St.stops.forEach(s=>{ if(s.name.toLowerCase().includes(q)) hits.push(s); });
+  hits.sort((a,b)=>{const ai=a.name.toLowerCase().indexOf(q),bi=b.name.toLowerCase().indexOf(q);return ai-bi||a.name.localeCompare(b.name,"fr");});
+  return hits;
+}
+function srItem(s){
+  const linesH=s.lines.slice(0,6).map(l=>'<span class="lchip" style="background:'+lc(l,null)+';font-size:10px;padding:2px 7px">'+esc(l)+'</span>').join("");
+  return '<div class="sr-item" onclick="onSearchHit(\''+esc(s.ref)+'\')">'
+    +'<div class="sr-ico">'+(s.tram?"🚊":"🚌")+'</div>'
+    +'<div class="sr-meta"><b>'+esc(s.name)+'</b><span style="display:flex;gap:4px;flex-wrap:wrap;margin-top:3px">'+linesH+'</span></div>'
+    +'<svg class="sr-arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="16" height="16"><path d="m9 18 6-6-6-6"/></svg></div>';
+}
+function renderSearch(val,res,max){
+  const q=(val||"").trim();
+  if(q.length<2){ res.innerHTML=(res.id==="home-results")?HOME_HINT:SEARCH_EMPTY; return; }
+  res.innerHTML=skeletonHTML(4);                       // squelette immédiat
+  clearTimeout(res._t);
+  res._t=setTimeout(()=>{
+    const hits=searchStops(q)||[];
+    if(!hits.length){ res.innerHTML='<div class="search-empty" style="padding:34px 16px"><h3>Aucun résultat</h3><p>Essaie un autre nom d\'arrêt CTS.</p></div>'; return; }
+    res.innerHTML=hits.slice(0,max||30).map(srItem).join("");
+  },170);
+}
+function bindHomeSearch(){
+  const inp=document.getElementById("home-inp"), res=document.getElementById("home-results");
+  if(!inp||!res) return;
+  res.innerHTML=HOME_HINT;
+  inp.addEventListener("input",e=>renderSearch(e.target.value,res,25));
+}
+
+/* ── HORLOGE live ── */
+function tickClock(){
+  const el=document.getElementById("h-clock"); if(!el) return;
+  el.textContent=new Date().toLocaleTimeString("fr-FR");
+}
+
+/* ── MÉTÉO réelle (Open-Meteo, gratuit sans clé) ── */
+const WMO={0:["☀️","Ciel dégagé"],1:["🌤️","Plutôt ensoleillé"],2:["⛅","Partiellement nuageux"],3:["☁️","Couvert"],
+  45:["🌫️","Brouillard"],48:["🌫️","Brouillard givrant"],51:["🌦️","Bruine légère"],53:["🌦️","Bruine"],55:["🌦️","Bruine dense"],
+  61:["🌧️","Pluie faible"],63:["🌧️","Pluie"],65:["🌧️","Forte pluie"],66:["🌧️","Pluie verglaçante"],67:["🌧️","Pluie verglaçante"],
+  71:["🌨️","Neige faible"],73:["🌨️","Neige"],75:["🌨️","Forte neige"],77:["❄️","Grésil"],
+  80:["🌧️","Averses"],81:["🌧️","Averses"],82:["⛈️","Fortes averses"],85:["🌨️","Averses de neige"],86:["🌨️","Averses de neige"],
+  95:["⛈️","Orage"],96:["⛈️","Orage + grêle"],99:["⛈️","Orage violent"]};
+async function loadWeather(){
+  try{
+    const u="https://api.open-meteo.com/v1/forecast?latitude=48.5839&longitude=7.7455&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,is_day&timezone=Europe%2FParis";
+    const r=await fetch(u); if(!r.ok) throw 0; const d=(await r.json()).current||{};
+    const wc=WMO[d.weather_code]||["🌡️","—"];
+    const ico=(d.is_day===0&&d.weather_code<=1)?"🌙":wc[0];
+    document.getElementById("w-ico").textContent=ico;
+    document.getElementById("w-temp").textContent=Math.round(d.temperature_2m)+"°";
+    document.getElementById("w-desc").textContent=wc[1];
+    document.getElementById("w-desc").style.color="#cfe0f5";
+    document.getElementById("w-feel").textContent="ressenti "+Math.round(d.apparent_temperature)+"°";
+    document.getElementById("w-wind").textContent="💨 "+Math.round(d.wind_speed_10m)+" km/h";
+    document.getElementById("w-hum").textContent="💧 "+Math.round(d.relative_humidity_2m)+" %";
+  }catch(e){ document.getElementById("w-desc").textContent="Météo indisponible"; }
+}
+
+/* ── QUALITÉ DE L'AIR réelle (Open-Meteo Air Quality, AQI européen) ── */
+function aqiCat(v){
+  if(v<=20) return ["Très bon","#1fd99a","😊"];
+  if(v<=40) return ["Bon","#9be35a","🙂"];
+  if(v<=60) return ["Moyen","#ffd60a","😐"];
+  if(v<=80) return ["Dégradé","#ff9f1c","😷"];
+  if(v<=100)return ["Mauvais","#ff4d4d","😨"];
+  return ["Très mauvais","#b14cff","☠️"];
+}
+async function loadAir(){
+  try{
+    const u="https://air-quality-api.open-meteo.com/v1/air-quality?latitude=48.5839&longitude=7.7455&current=european_aqi,pm2_5,pm10,nitrogen_dioxide&timezone=Europe%2FParis";
+    const r=await fetch(u); if(!r.ok) throw 0; const d=(await r.json()).current||{};
+    const aqi=Math.round(d.european_aqi), cat=aqiCat(aqi);
+    document.getElementById("a-ico").textContent=cat[2];
+    document.getElementById("a-aqi").textContent=aqi;
+    document.getElementById("a-aqi").style.color=cat[1];
+    const ad=document.getElementById("a-desc"); ad.textContent=cat[0]+" · indice EU"; ad.style.color=cat[1];
+    document.getElementById("a-pm25").textContent="PM2.5 "+Math.round(d.pm2_5);
+    document.getElementById("a-pm10").textContent="PM10 "+Math.round(d.pm10);
+    document.getElementById("a-no2").textContent="NO₂ "+Math.round(d.nitrogen_dioxide);
+  }catch(e){ document.getElementById("a-desc").textContent="Données indisponibles"; }
+}
+function refreshInfos(){ loadWeather(); loadAir(); }
+
+/* ════════ OVERLAY DÉTAIL : ouverture/fermeture + historique ════════ */
+function openDetail(eyebrow,title,bodyHTML){
+  document.getElementById("dh-eyebrow").textContent=eyebrow;
+  document.getElementById("dh-title").textContent=title;
+  document.getElementById("detail-body").innerHTML=bodyHTML;
+  document.getElementById("detail-bg").classList.add("show");
+}
+function closeDetail(){ document.getElementById("detail-bg").classList.remove("show"); }
+function detailOpen(){ return document.getElementById("detail-bg").classList.contains("show"); }
+const LOAD_HTML='<div class="dt-load"><div class="sp"></div>Chargement des données en direct…</div>';
+
+function windDir(deg){ const d=["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSO","SO","OSO","O","ONO","NO","NNO"]; return d[Math.round(((deg||0)%360)/22.5)%16]; }
+function uvCat(v){ v=v||0; if(v<3)return["Faible","#1fd99a"]; if(v<6)return["Modéré","#ffd60a"]; if(v<8)return["Élevé","#ff9f1c"]; if(v<11)return["Très élevé","#ff4d4d"]; return["Extrême","#b14cff"]; }
+function hhmm(iso){ try{return new Date(iso).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});}catch(e){return"—";} }
+
+async function openWeatherDetail(){
+  openDetail("Météo · Strasbourg en direct","Météo détaillée",LOAD_HTML);
+  try{
+    const u="https://api.open-meteo.com/v1/forecast?latitude=48.5839&longitude=7.7455"
+      +"&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,is_day,cloud_cover"
+      +"&hourly=temperature_2m,weather_code,precipitation_probability"
+      +"&daily=sunrise,sunset,uv_index_max,temperature_2m_max,temperature_2m_min,precipitation_probability_max"
+      +"&forecast_days=1&timezone=Europe%2FParis";
+    const d=await (await fetch(u)).json();
+    const c=d.current||{}, day=(d.daily||{});
+    const wc=WMO[c.weather_code]||["🌡️","—"];
+    const ico=(c.is_day===0&&c.weather_code<=1)?"🌙":wc[0];
+    const uv=Math.round((day.uv_index_max&&day.uv_index_max[0])||0), uvc=uvCat(uv);
+    // créneaux horaires à venir (12h)
+    let hours="";
+    if(d.hourly&&d.hourly.time){
+      const now=Date.now(); let added=0;
+      for(let i=0;i<d.hourly.time.length&&added<12;i++){
+        const t=Date.parse(d.hourly.time[i]); if(t<now-3600000) continue;
+        const w=WMO[d.hourly.weather_code[i]]||["🌡️",""];
+        const pp=d.hourly.precipitation_probability?d.hourly.precipitation_probability[i]:null;
+        hours+='<div class="wx-h"><div class="hh">'+(added===0?"maint.":new Date(t).getHours()+"h")+'</div>'
+          +'<div class="hi">'+w[0]+'</div><div class="ht">'+Math.round(d.hourly.temperature_2m[i])+'°</div>'
+          +(pp!=null?'<div class="hp">💧'+pp+'%</div>':'')+'</div>';
+        added++;
+      }
+    }
+    const cell=(k,v,ic)=>'<div class="wx-cell"><div class="k">'+ic+' '+k+'</div><div class="v">'+v+'</div></div>';
+    const body='<div class="wx-hero"><div class="wxh-sun"></div>'
+      +'<div class="wxh-ico">'+ico+'</div>'
+      +'<div class="wxh-temp">'+Math.round(c.temperature_2m)+'°</div>'
+      +'<div class="wxh-desc">'+wc[1]+' · ressenti '+Math.round(c.apparent_temperature)+'°</div></div>'
+      +'<div class="wx-grid">'
+      +cell("Ressenti",Math.round(c.apparent_temperature)+"°","🌡️")
+      +cell("Vent",Math.round(c.wind_speed_10m)+' <small>km/h '+windDir(c.wind_direction_10m)+'</small>',"💨")
+      +cell("Humidité",Math.round(c.relative_humidity_2m)+" <small>%</small>","💧")
+      +cell("Pression",Math.round(c.surface_pressure)+" <small>hPa</small>","🔵")
+      +cell("Indice UV",uv+' <small style="color:'+uvc[1]+'">'+uvc[0]+'</small>',"🔆")
+      +cell("Nuages",Math.round(c.cloud_cover)+" <small>%</small>","☁️")
+      +'</div>'
+      +'<div class="wx-sect">🕐 Prochaines heures</div><div class="wx-hours">'+hours+'</div>'
+      +'<div class="wx-grid">'
+      +cell("Lever du soleil",hhmm(day.sunrise&&day.sunrise[0]),"🌅")
+      +cell("Coucher",hhmm(day.sunset&&day.sunset[0]),"🌇")
+      +cell("Max du jour",Math.round(day.temperature_2m_max&&day.temperature_2m_max[0])+"°","⬆️")
+      +cell("Min du jour",Math.round(day.temperature_2m_min&&day.temperature_2m_min[0])+"°","⬇️")
+      +'</div>'
+      +'<div class="dt-note">📡 Données <b>Open-Meteo</b> en temps réel pour Strasbourg (48.58, 7.75). Modèle météo actualisé en continu.</div>';
+    if(detailOpen()) document.getElementById("detail-body").innerHTML=body;
+  }catch(e){ document.getElementById("detail-body").innerHTML='<div class="dep-empty">Météo indisponible pour le moment.</div>'; }
+}
+
+async function openAirDetail(){
+  openDetail("Qualité de l'air · en direct","Qualité de l'air",LOAD_HTML);
+  try{
+    const u="https://air-quality-api.open-meteo.com/v1/air-quality?latitude=48.5839&longitude=7.7455"
+      +"&current=european_aqi,pm2_5,pm10,nitrogen_dioxide,ozone,sulphur_dioxide,carbon_monoxide&timezone=Europe%2FParis";
+    const d=(await (await fetch(u)).json()).current||{};
+    const aqi=Math.round(d.european_aqi||0), cat=aqiCat(aqi);
+    const advice = aqi<=20?"Air excellent — profitez-en dehors sans réserve."
+      : aqi<=40?"Bonne qualité — conditions idéales pour bouger."
+      : aqi<=60?"Qualité moyenne — ok pour la plupart, vigilance pour les personnes sensibles."
+      : aqi<=80?"Air dégradé — limitez les efforts intenses prolongés en extérieur."
+      : aqi<=100?"Mauvais — personnes sensibles : réduisez les sorties."
+      : "Très mauvais — évitez les efforts en extérieur.";
+    const R=320, frac=Math.min(1,aqi/120), off=R*(1-frac);
+    const gauge='<div class="aq-gauge"><svg width="120" height="120" viewBox="0 0 120 120">'
+      +'<circle cx="60" cy="60" r="51" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="11"/>'
+      +'<circle cx="60" cy="60" r="51" fill="none" stroke="'+cat[1]+'" stroke-width="11" stroke-linecap="round" stroke-dasharray="320" stroke-dashoffset="'+off+'" style="transition:stroke-dashoffset 1s ease;filter:drop-shadow(0 0 6px '+cat[1]+'88)"/>'
+      +'</svg><div class="nums"><b style="color:'+cat[1]+'">'+aqi+'</b><span>indice EU</span></div></div>';
+    const pol=(n,v,unit,max)=>{ const pct=Math.min(100,Math.round((v/max)*100)); const col=pct<40?"#1fd99a":pct<70?"#ffd60a":"#ff5a5a";
+      return '<div class="aq-p"><div class="pn">'+n+'</div><div class="pv">'+Math.round(v)+' <small>'+unit+'</small></div>'
+        +'<div class="pbar"><i style="width:'+pct+'%;background:'+col+'"></i></div></div>'; };
+    const body='<div class="aq-hero">'+gauge
+      +'<div class="aqh-txt"><b style="color:'+cat[1]+'">'+cat[0]+' '+cat[2]+'</b><span>'+advice+'</span></div></div>'
+      +'<div class="wx-sect">🧪 Polluants (µg/m³)</div>'
+      +'<div class="aq-pollutants">'
+      +pol("PM2.5",d.pm2_5||0,"µg/m³",50)
+      +pol("PM10",d.pm10||0,"µg/m³",80)
+      +pol("NO₂",d.nitrogen_dioxide||0,"µg/m³",100)
+      +pol("Ozone O₃",d.ozone||0,"µg/m³",180)
+      +pol("SO₂",d.sulphur_dioxide||0,"µg/m³",100)
+      +pol("CO",d.carbon_monoxide||0,"µg/m³",4000)
+      +'</div>'
+      +'<div class="dt-note">📡 <b>Open-Meteo Air Quality</b> · indice européen (EU AQI) en temps réel. Plus l\'indice est bas, meilleur est l\'air.</div>';
+    if(detailOpen()) document.getElementById("detail-body").innerHTML=body;
+  }catch(e){ document.getElementById("detail-body").innerHTML='<div class="dep-empty">Qualité de l\'air indisponible.</div>'; }
+}
+
+/* ── MINI-MAP (aperçu live, page Accueil) ── */
+function initMini(){
+  if(St.mini) return;
+  const el=document.getElementById("mini"); if(!el||typeof L==="undefined") return;
+  St.mini=L.map("mini",{zoomControl:false,attributionControl:false,dragging:false,scrollWheelZoom:false,
+    doubleClickZoom:false,boxZoom:false,keyboard:false,touchZoom:false,tap:false,preferCanvas:true})
+    .setView([48.5839,7.7455],11.5);
+  L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{maxZoom:19}).addTo(St.mini);
+  L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}",{opacity:.9}).addTo(St.mini);
+  St.lMiniTram=L.layerGroup().addTo(St.mini);
+  St.lMiniVeh =L.layerGroup().addTo(St.mini);
+  drawMiniTram();
+  setTimeout(()=>St.mini&&St.mini.invalidateSize(),80);
+}
+function drawMiniTram(){
+  if(!St.mini||!St.lMiniTram) return;
+  St.lMiniTram.clearLayers();
+  St.tramLines.forEach(t=>L.polyline(t.ll,{color:t.color,weight:1.5,opacity:.92,interactive:false}).addTo(St.lMiniTram));
+}
+function tickMini(){
+  if(!St.mini||St.curView!=="home"||!St.lMiniVeh) return;
+  St.lMiniVeh.clearLayers();
+  for(const j of St.journeys){
+    if(j.mode==="tram"&&!St.show.tram) continue;
+    if(j.mode==="bus" &&!St.show.bus)  continue;
+    const cur=St.vpos.get(j.key); if(!cur) continue;
+    L.circleMarker(cur,{radius:j.mode==="tram"?4:2.6,color:"#fff",weight:1,
+      fillColor:lc(j.line,j.mode),fillOpacity:1,interactive:false}).addTo(St.lMiniVeh);
+  }
+}
+
+/* ── Mini-carte LIVE de la page d'accueil (présentation) ── */
+function initLandingMini(){
+  if(St.lmini) return;
+  const el=document.getElementById("lmini"); if(!el||typeof L==="undefined") return;
+  St.lmini=L.map("lmini",{zoomControl:false,attributionControl:false,dragging:false,scrollWheelZoom:false,
+    doubleClickZoom:false,boxZoom:false,keyboard:false,touchZoom:false,tap:false,preferCanvas:true})
+    .setView([48.5786,7.7509],11.7);
+  L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{maxZoom:19}).addTo(St.lmini);
+  L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}",{opacity:.9}).addTo(St.lmini);
+  St.lLandTram=L.layerGroup().addTo(St.lmini);
+  St.lLandVeh =L.layerGroup().addTo(St.lmini);
+  drawLandingTram();
+  setTimeout(()=>St.lmini&&St.lmini.invalidateSize(),120);
+}
+function drawLandingTram(){
+  if(!St.lmini||!St.lLandTram) return;
+  St.lLandTram.clearLayers();
+  St.tramLines.forEach(t=>L.polyline(t.ll,{color:t.color,weight:1.4,opacity:.92,interactive:false}).addTo(St.lLandTram));
+}
+function landingVisible(){ const el=document.getElementById("landing"); return el && el.style.display!=="none" && !el.classList.contains("hide"); }
+function tickLanding(){
+  if(!St.lmini||!St.lLandVeh||!landingVisible()) return;
+  St.lLandVeh.clearLayers();
+  let nt=0,nb=0;
+  for(const j of St.journeys){
+    const cur=St.vpos.get(j.key); if(!cur) continue;
+    if(j.mode==="tram")nt++; else nb++;
+    L.circleMarker(cur,{radius:j.mode==="tram"?4:2.8,color:"#fff",weight:1,
+      fillColor:lc(j.line,j.mode),fillOpacity:1,interactive:false}).addTo(St.lLandVeh);
+  }
+  const et=document.getElementById("ll-tram"),eb=document.getElementById("ll-bus");
+  if(et)et.textContent=nt; if(eb)eb.textContent=nb;
+}
+
+/* ── Indicateur animé de la navbar ── */
+function moveNavInd(){
+  const ind=document.getElementById("nav-ind"), act=document.querySelector(".nbtab.active");
+  if(!ind||!act) return;
+  ind.style.left="0"; ind.style.width=act.offsetWidth+"px";
+  ind.style.transform="translateX("+act.offsetLeft+"px)";
+}
+
+
+function startLoops(){
+  refreshVeh();
+  // fetch données API toutes les 15s (limite CTS : 1 req/15s — au-delà = ban, et l'API ne change pas plus vite)
+  St.timer=setInterval(refreshVeh,15000);
+  // mouvement + mini-map recalculés toutes les 0,5s → glissement continu
+  St.vtick=setInterval(()=>{tickVehicles();tickMini();tickLanding();},500);
+}
+
+/* ── FILTRES MAP ── */
+function bindFilters(){
+  document.querySelectorAll(".fchip").forEach(chip=>{
+    chip.addEventListener("click",()=>{
+      const l=chip.dataset.l;
+      chip.classList.toggle("on");
+      St.show[l]=chip.classList.contains("on");
+      if(l==="stops") drawStops();
+      if(l==="pr"){
+        if(St.show.pr){loadPR().then(()=>St.map.addLayer(St.lPr));}
+        else St.map.removeLayer(St.lPr);
+      }
+      if(l==="tram"||l==="bus") refreshVeh();
+    });
+  });
+}
+
+/* ── NAVIGATION ── */
+function switchView(id){
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+  document.querySelectorAll(".nbtab").forEach(t=>t.classList.remove("active"));
+  document.getElementById("view-"+id).classList.add("active");
+  document.querySelector('[data-view="'+id+'"]').classList.add("active");
+  St.curView=id;
+  moveNavInd();
+  if(id==="map")  setTimeout(()=>St.map&&St.map.invalidateSize(),50);
+  if(id==="home"){ setTimeout(()=>St.mini&&St.mini.invalidateSize(),50); tickMini(); }
+  if(id==="favs"){renderFavs();refreshFavsDeps();}
+}
+
+/* ── TOAST ── */
+let toastT;
+function toast(msg){
+  const t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");
+  clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("show"),2800);
+}
+
+/* ════════ PARTAGE NATIF (navigator.share) ════════ */
+function shareCurrent(){
+  const c=St.shareCtx||{}, url=location.href.split("#")[0];
+  let text;
+  if(c.type==="veh") text=(c.mode==="tram"?"🚊 Tram ":"🚌 Bus ")+(c.line||"")+" → "+(c.dest||"")+" — en direct sur Strass&Go";
+  else text="🚏 "+(c.name||"Arrêt CTS")+" — prochains passages bus & tram en direct sur Strass&Go";
+  if(navigator.share){ navigator.share({title:"Strass&Go",text,url}).catch(()=>{}); }
+  else { try{navigator.clipboard.writeText(text+" "+url);}catch(e){} toast("🔗 Lien copié"); }
+}
+
+/* ════════ ALERTES FAVORIS (notifications locales) ════════
+   Surveille les arrêts favoris avec 🔔 activé et notifie quand un passage est ≤ 2 min.
+   Fonctionne app ouverte/en arrière-plan récent. (Push appli fermée = FCM, V2.1.) */
+const ALERT_MIN=2;
+let notified=new Set();
+async function ensureNotifPerm(){
+  if(!("Notification" in window)){ toast("Notifications non supportées ici"); return false; }
+  if(Notification.permission==="granted") return true;
+  if(Notification.permission==="denied"){ toast("Notifications bloquées (réglages du navigateur)"); return false; }
+  try{ return (await Notification.requestPermission())==="granted"; }catch(e){ return false; }
+}
+async function toggleFavAlert(ref){
+  const f=St.favs.find(x=>x.ref===ref); if(!f) return;
+  if(!f.alert){ if(!(await ensureNotifPerm())) return; f.alert=true; toast("🔔 Alerte activée pour "+f.name); checkFavAlerts(); }
+  else { f.alert=false; toast("🔕 Alerte désactivée"); }
+  saveFavs(); renderFavs();
+}
+function fireNotif(title,body){
+  const opts={body,icon:"icon-192.png",badge:"icon-192.png",tag:title,vibrate:[90,40,90]};
+  try{
+    if(navigator.serviceWorker&&navigator.serviceWorker.ready)
+      navigator.serviceWorker.ready.then(r=>r.showNotification(title,opts)).catch(()=>{try{new Notification(title,opts);}catch(e){}});
+    else new Notification(title,opts);
+  }catch(e){}
+}
+async function checkFavAlerts(){
+  if(!("Notification" in window)||Notification.permission!=="granted") return;
+  const alerted=St.favs.filter(f=>f.alert); if(!alerted.length) return;
+  const now=Date.now();
+  for(const f of alerted){
+    try{
+      const data=await Api.sm(f.ref);
+      const dels=firstD(data,"StopMonitoringDelivery"); let visits=[];
+      for(const d of dels) visits=visits.concat(asA(d.MonitoredStopVisit||d));
+      for(const v of visits){
+        const j=v.MonitoredVehicleJourney||v.monitoredVehicleJourney||{}, call=j.MonitoredCall||j.monitoredCall||{};
+        const line=txt(j.PublishedLineName)||txt(j.LineRef);
+        const dest=txt(j.DestinationName)||txt(j.DirectionName)||"—";
+        const exp=Date.parse(txt(call.ExpectedDepartureTime)||txt(call.ExpectedArrivalTime)||"");
+        if(isNaN(exp)) continue;
+        const mins=Math.round((exp-now)/60000);
+        if(mins<=ALERT_MIN && mins>=0){
+          const k=f.ref+"|"+line+"|"+dest+"|"+Math.round(exp/60000);
+          if(!notified.has(k)){ notified.add(k);
+            fireNotif("🚍 "+(line||"Bus")+" → "+dest, (mins<=0?"À quai — ":"Dans "+mins+" min — ")+f.name); }
+        }
+      }
+    }catch(e){}
+  }
+  if(notified.size>200) notified=new Set([...notified].slice(-100));
+}
+
+/* ════════ PWA : Service Worker + installation ════════ */
+let deferredPrompt=null;
+function isStandalone(){ return matchMedia("(display-mode: standalone)").matches || window.navigator.standalone===true; }
+function isIOS(){ return /iphone|ipad|ipod/i.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent)&&navigator.maxTouchPoints>1); }
+function registerSW(){
+  if("serviceWorker" in navigator && location.protocol!=="file:")
+    navigator.serviceWorker.register("sw.js").catch(()=>{});
+}
+function detectBrowser(){
+  const ua=navigator.userAgent;
+  if(isIOS()) return /crios|fxios|edgios|opt\//i.test(ua)?"ios-other":"ios-safari";
+  if(/samsungbrowser/i.test(ua)) return "samsung";
+  if(/firefox|fxios/i.test(ua)) return "firefox";
+  if(/edg/i.test(ua)) return "edge";
+  if(/chrome|chromium|crios/i.test(ua)) return "chrome";
+  return "other";
+}
+function installStepsHTML(){
+  const b=detectBrowser();
+  const s=(n,t)=>'<div class="pm-step"><span class="pm-n">'+n+'</span><span>'+t+'</span></div>';
+  if(b==="ios-safari") return s(1,'Touche <b>⤴ Partager</b> en bas de Safari')+s(2,'Fais défiler et choisis <b>« Sur l\'écran d\'accueil »</b>')+s(3,'Appuie sur <b>Ajouter</b> ✅');
+  if(b==="ios-other") return '<div class="pm-warn">⚠️ Sur iPhone, l\'installation marche uniquement depuis <b>Safari</b>. Ouvre cette page dans Safari, puis :</div>'+s(1,'<b>⤴ Partager</b>')+s(2,'<b>« Sur l\'écran d\'accueil »</b>')+s(3,'<b>Ajouter</b>');
+  if(b==="firefox") return s(1,'Ouvre le menu <b>⋮</b> (en haut à droite)')+s(2,'Touche <b>« Installer »</b> / <b>« Ajouter à l\'écran d\'accueil »</b>')+s(3,'Confirme ✅');
+  if(b==="samsung") return s(1,'Ouvre le menu <b>☰</b> de Samsung Internet')+s(2,'<b>« Ajouter la page à »</b> → <b>Écran d\'accueil</b>')+s(3,'Confirme ✅');
+  return s(1,'Ouvre le menu <b>⋮</b> du navigateur')+s(2,'Touche <b>« Installer l\'application »</b> (ou « Ajouter à l\'écran d\'accueil »)')+s(3,'Confirme ✅');
+}
+function openInstallModal(){
+  document.getElementById("pm-steps").innerHTML=installStepsHTML();
+  document.getElementById("pwa-modal").classList.add("show");
+}
+function closeInstallModal(){ document.getElementById("pwa-modal").classList.remove("show"); }
+async function triggerInstall(){
+  if(deferredPrompt){
+    deferredPrompt.prompt();
+    try{ const r=await deferredPrompt.userChoice; if(r&&r.outcome==="accepted") toast("📲 Installation en cours…"); }catch(e){}
+    deferredPrompt=null;
+  } else {
+    openInstallModal();   // pas de prompt natif (iOS, Firefox…) → fenêtre avec mode d'emploi
+  }
+}
+function initPWAInstall(){
+  const card=document.getElementById("land-install"), go=document.getElementById("li-go"), steps=document.getElementById("li-steps");
+  if(steps) steps.style.display="none";   // les instructions vivent désormais dans la fenêtre dédiée
+  if(!isStandalone() && card) card.style.display="block";
+  window.addEventListener("beforeinstallprompt",e=>{ e.preventDefault(); deferredPrompt=e; if(!isStandalone()&&card) card.style.display="block"; });
+  window.addEventListener("appinstalled",()=>{ if(card) card.style.display="none"; closeInstallModal(); toast("✅ Strass&Go installée"); });
+  if(go) go.onclick=triggerInstall;
+  const pc=document.getElementById("pm-close"); if(pc) pc.onclick=closeInstallModal;
+  const pm=document.getElementById("pwa-modal"); if(pm) pm.addEventListener("click",e=>{ if(e.target.id==="pwa-modal") closeInstallModal(); });
+}
+
+/* ════════ BOUTON RETOUR → toujours vers l'accueil (jamais le splash) ════════ */
+function anyOverlayOpen(){
+  const ids=["pwa-modal","detail-bg","modal-bg"];
+  return ids.some(id=>{ const el=document.getElementById(id); return el&&el.classList.contains("show"); });
+}
+function closeTopOverlay(){
+  const pm=document.getElementById("pwa-modal"); if(pm&&pm.classList.contains("show")){ closeInstallModal(); return true; }
+  const db=document.getElementById("detail-bg"); if(db&&db.classList.contains("show")){ closeDetail(); return true; }
+  const mb=document.getElementById("modal-bg"); if(mb&&mb.classList.contains("show")){ closeModal(); return true; }
+  return false;
+}
+function armBack(){ try{ history.pushState({sg:1},""); }catch(e){} }
+function initBackHandler(){
+  armBack();
+  window.addEventListener("popstate",function(){
+    if(closeTopOverlay()){ armBack(); return; }                 // 1) ferme la fenêtre ouverte
+    if(St.curView && St.curView!=="home"){ switchView("home"); armBack(); return; } // 2) revient à l'accueil
+    armBack();                                                  // 3) déjà à l'accueil : on reste dans l'app
+  });
+}
+
+/* ── BOOT ── */
+function boot(){
+  if(/COLLE-TON-URL/i.test(PROXY)||!PROXY||PROXY.length<10){
+    // Fallback : récupère depuis localStorage
+    try{const s=localStorage.getItem("sc_proxy");if(s&&s.length>10){window.PROXY=s;}}catch(e){}
+  }
+  if(/COLLE-TON-URL/i.test(PROXY)){
+    // Onboarding inline minimal — pas de plein écran, juste un overlay discret
+    document.body.insertAdjacentHTML("beforeend",`
+      <div id="ob" style="position:fixed;inset:0;background:rgba(8,11,18,.97);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;font-family:'Sora',sans-serif">
+        <div style="max-width:440px;width:100%;background:#0c1020;border:1px solid rgba(255,255,255,.15);border-radius:22px;padding:28px">
+          <div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#E2001A,#7a0010);display:grid;place-items:center;margin-bottom:16px">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/></svg>
+          </div>
+          <h2 style="margin:0 0 8px;font-size:21px;font-weight:900;color:#eaf0fa">Strass&amp;Go</h2>
+          <p style="color:#8c9ab5;font-size:13px;line-height:1.55;margin:0 0 20px">Colle l'URL de ton <b style="color:#27d3ff">Cloudflare Worker</b> pour activer les données CTS en temps réel.</p>
+          <p style="color:#4a5568;font-size:12px;margin:0 0 12px">Déploie <code style="background:rgba(255,255,255,.07);padding:1px 6px;border-radius:5px;color:#27d3ff">cts-proxy-worker.js</code> sur <a href="https://dash.cloudflare.com/workers" target="_blank" style="color:#27d3ff">dash.cloudflare.com/workers</a></p>
+          <div style="display:flex;gap:8px">
+            <input id="ob-inp" placeholder="https://cts-proxy.xxx.workers.dev" autocomplete="off" style="flex:1;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.2);border-radius:12px;padding:12px 14px;color:#eaf0fa;font-size:13px;font-family:'JetBrains Mono',monospace;outline:none"/>
+            <button id="ob-go" style="background:linear-gradient(135deg,#E2001A,#9a0010);border:none;color:#fff;font-weight:700;padding:0 20px;border-radius:12px;cursor:pointer;font-size:14px">OK</button>
+          </div>
+        </div>
+      </div>`);
+    const go=()=>{
+      const v=document.getElementById("ob-inp").value.trim().replace(/\/+$/,"");
+      if(!/^https?:\/\//.test(v)){toast("URL invalide (doit commencer par https://)");return;}
+      window.PROXY=v;
+      try{localStorage.setItem("sc_proxy",v);}catch(e){}
+      document.getElementById("ob").remove();
+      mainBoot();
+    };
+    document.getElementById("ob-go").onclick=go;
+    document.getElementById("ob-inp").addEventListener("keydown",e=>{if(e.key==="Enter")go();});
+    return;
+  }
+  mainBoot();
+}
+function mainBoot(){
+  St.curView="home";
+  loadFavs(); updateFavBadge(); renderFavs();
+  initMap(); bindFilters(); bindSearch();
+  document.getElementById("m-close").onclick=closeModal;
+  const msh=document.getElementById("m-share"); if(msh) msh.onclick=shareCurrent;
+  document.getElementById("modal-bg").addEventListener("click",e=>{if(e.target.id==="modal-bg")closeModal();});
+  // overlay détail (météo/air)
+  const dc=document.getElementById("detail-close"); if(dc) dc.onclick=closeDetail;
+  const dbg=document.getElementById("detail-bg"); if(dbg) dbg.addEventListener("click",e=>{if(e.target.id==="detail-bg")closeDetail();});
+  document.addEventListener("keydown",e=>{ if(e.key==="Escape"){ if(!closeTopOverlay()) {} } });
+  document.querySelectorAll(".nbtab").forEach(t=>t.addEventListener("click",()=>switchView(t.dataset.view)));
+  document.getElementById("refresh-favs").onclick=()=>{renderFavs();refreshFavsDeps();};
+  registerSW(); initPWAInstall(); initBackHandler();      // PWA + bouton retour → accueil
+  setInterval(checkFavAlerts,60000);                      // alertes favoris toutes les 60s
+  // Recherche depuis l'accueil → ouvre la PAGE recherche dédiée (pas de filtre inline)
+  const hi=document.getElementById("home-inp");
+  if(hi){ hi.setAttribute("readonly","readonly");
+    const goSearch=()=>{ switchView("search"); setTimeout(()=>{const si=document.getElementById("search-inp"); if(si) si.focus();},90); };
+    hi.addEventListener("click",goSearch); hi.addEventListener("focus",goSearch); }
+  const hr=document.getElementById("home-results"); if(hr) hr.innerHTML=HOME_HINT;
+  // Page Accueil : mini-map + infos live + horloge
+  initMini();
+  const mo=document.getElementById("mini-open"); if(mo) mo.onclick=()=>switchView("map");
+  const hs=document.getElementById("home-hero-scene"); if(hs) hs.innerHTML=busRoadHTML({});
+  loadUser();
+  const sv=document.getElementById("acc-save"); if(sv) sv.onclick=saveUser;
+  refreshInfos();  setInterval(refreshInfos,600000);     // météo/air : vraies données, rafraîchies ~10 min
+  tickClock();     setInterval(tickClock,1000);          // horloge live
+  moveNavInd(); window.addEventListener("resize",moveNavInd);
+  initLandingMini();                                      // mini-carte LIVE sur la page d'accueil de présentation
+  const enter=()=>{ const el=document.getElementById("landing"); if(!el)return; el.classList.add("hide");
+    setTimeout(()=>{ el.style.display="none"; if(St.mini) St.mini.invalidateSize(); if(St.map) St.map.invalidateSize(); moveNavInd(); },650); };
+  const g1=document.getElementById("land-go"), g2=document.getElementById("land-go2"), g3=document.getElementById("land-go3");
+  if(g1) g1.onclick=enter; if(g2) g2.onclick=enter; if(g3) g3.onclick=enter;
+  loadStops().then(()=>{ loadTramNetwork(); loadBusNetwork(); startLoops(); }).catch(()=>{});
+}
+if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",boot);
+else boot();
+</script>
+
+<!-- ═══════════ MODULE ISOLÉ : fenêtre d'accueil "Salut !" ═══════════
+     @ By Brice Jct · Alpha OS — additif, n'altère aucune logique existante -->
+<script>
+(function(){
+  "use strict";
+  var bg=document.getElementById("welcome-bg");
+  if(!bg) return;
+  var intro=document.getElementById("wc-intro"),
+      sA=document.getElementById("wc-steps-android"),
+      sI=document.getElementById("wc-steps-ios");
+
+  function reset(){ if(intro) intro.style.display=""; if(sA) sA.classList.remove("show"); if(sI) sI.classList.remove("show"); }
+  function open(){ reset(); bg.classList.add("show"); }
+  function close(){ bg.classList.remove("show"); }
+  function showSteps(which){ if(intro) intro.style.display="none"; var t=(which==="ios"?sI:sA); if(t) t.classList.add("show"); }
+
+  var bA=document.getElementById("wc-android"),
+      bI=document.getElementById("wc-ios"),
+      bC=document.getElementById("wc-close");
+  if(bA) bA.addEventListener("click",function(){ showSteps("android"); });
+  if(bI) bI.addEventListener("click",function(){ showSteps("ios"); });
+  if(bC) bC.addEventListener("click",close);
+  Array.prototype.forEach.call(document.querySelectorAll(".wc-back"),function(b){ b.addEventListener("click",reset); });
+  bg.addEventListener("click",function(e){ if(e.target===bg) close(); });
+  document.addEventListener("keydown",function(e){ if((e.key==="Escape"||e.key==="Esc") && bg.classList.contains("show")) close(); });
+
+  /* ouverture "à l'arrivée" : 1× par session, dès l'entrée dans l'app */
+  function maybeOpen(){
+    try{ if(sessionStorage.getItem("sg_welcome_seen")) return; }catch(_){}
+    try{ sessionStorage.setItem("sg_welcome_seen","1"); }catch(_){}
+    open();
+  }
+  function landingHidden(){
+    var l=document.getElementById("landing");
+    if(!l) return true;
+    var cs=getComputedStyle(l);
+    return cs.display==="none" || cs.opacity==="0" || l.classList.contains("hide");
+  }
+  ["land-go","land-go2","land-go3"].forEach(function(id){
+    var el=document.getElementById(id);
+    if(el) el.addEventListener("click",function(){ setTimeout(maybeOpen,750); });
+  });
+  window.addEventListener("load",function(){
+    setTimeout(function(){ if(landingHidden()) maybeOpen(); },1200);
+  });
+})();
+</script>
+
+<!-- ═══════════ MODULE ISOLÉ : onboarding NOTIFICATIONS ═══════════
+     @ By Brice Jct · Alpha OS — additif. Réutilise ensureNotifPerm()/checkFavAlerts()
+     existants (globaux), ne modifie aucune fonction de l'app. -->
+<script>
+(function(){
+  "use strict";
+  var hasNotif = ("Notification" in window);
+
+  /* ── A. Autorisation demandée DÈS L'ENTRÉE (dans le geste → compatible iOS) ── */
+  var askedEnter=false;
+  function askOnEnter(){
+    if(askedEnter) return; askedEnter=true;
+    try{
+      if(hasNotif && Notification.permission==="default" && typeof ensureNotifPerm==="function")
+        ensureNotifPerm();           // requestPermission() lancé dans la pile du clic
+    }catch(_){}
+  }
+  ["land-go","land-go2","land-go3"].forEach(function(id){
+    var el=document.getElementById(id);
+    if(el) el.addEventListener("click",askOnEnter);
+  });
+
+  /* ── B. FENÊTRE FAVORIS : explication + demande après 2 s ── */
+  var bg=document.getElementById("favnotif-bg");
+  if(!bg) return;
+  var lead=document.getElementById("fn-lead"),
+      btn=document.getElementById("fn-activate"),
+      closeBtn=document.getElementById("fn-close");
+  var shown=false, autoTimer=null;
+
+  function setVariant(){
+    var p = hasNotif ? Notification.permission : "unsupported";
+    if(p==="granted"){
+      lead.innerHTML="✅ Notifications <b>activées</b> ! Vous serez prévenu·e automatiquement dès qu'un bus est à <b>moins de 2 min</b> de votre arrêt favori.";
+      btn.textContent="Parfait, c'est activé ✓"; btn.classList.add("ok"); btn.style.display="";
+    } else if(p==="denied"){
+      lead.innerHTML="🔕 Les notifications sont <b>bloquées</b> par votre navigateur. Ouvrez les réglages du site (icône 🔒 dans la barre d'adresse) → <b>Notifications → Autoriser</b>, puis rouvrez l'app.";
+      btn.style.display="none";
+    } else if(p==="unsupported"){
+      lead.innerHTML="Votre navigateur ne gère pas les notifications ici. <b>Installez l'app</b> (Android / iPhone) puis rouvrez-la pour les recevoir.";
+      btn.style.display="none";
+    } else {
+      lead.innerHTML="Pour être prévenu·e quand votre bus arrive, activez les notifications. Une demande va s'afficher <b>en haut de votre navigateur</b> — touchez <b>« Autoriser »</b>.";
+      btn.textContent="🔔 Activer les notifications"; btn.classList.remove("ok"); btn.style.display="";
+    }
+  }
+  function requestPerm(){
+    if(!hasNotif || typeof ensureNotifPerm!=="function") return;
+    if(Notification.permission!=="default"){ setVariant(); return; }
+    Promise.resolve(ensureNotifPerm()).then(function(ok){
+      setVariant();
+      if(ok){
+        try{ if(typeof checkFavAlerts==="function") checkFavAlerts(); }catch(_){}
+        try{ if(typeof toast==="function") toast("🔔 Notifications activées — tu seras prévenu·e à l'approche du bus"); }catch(_){}
+      }
+    });
+  }
+  function open(){
+    setVariant(); bg.classList.add("show");
+    if(hasNotif && Notification.permission==="default"){      // Brice : on attend 2 s puis on demande
+      clearTimeout(autoTimer); autoTimer=setTimeout(requestPerm,2000);
+    }
+  }
+  function close(){ bg.classList.remove("show"); clearTimeout(autoTimer); }
+
+  if(btn) btn.addEventListener("click",function(){
+    if(hasNotif && Notification.permission==="granted"){ close(); return; }
+    requestPerm();
+  });
+  if(closeBtn) closeBtn.addEventListener("click",close);
+  bg.addEventListener("click",function(e){ if(e.target===bg) close(); });
+  document.addEventListener("keydown",function(e){ if((e.key==="Escape"||e.key==="Esc") && bg.classList.contains("show")) close(); });
+
+  /* ouverture dès l'arrivée sur la page Favoris (1×/session) */
+  var favTab=document.querySelector('.nbtab[data-view="favs"]');
+  if(favTab) favTab.addEventListener("click",function(){
+    if(shown) return; shown=true;
+    setTimeout(open,280);     // laisse la vue Favoris s'afficher d'abord
+  });
+})();
+</script>
+</body>
+</html>
