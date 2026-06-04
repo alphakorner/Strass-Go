@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Aperçu — Carte de connexion corrigée · Strass&Go</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;800;900&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#000;--bg2:#0b0c11;--cyan:#27d3ff;--muted:#9aa0ab;--dim:#5c616d;
+  --hair:rgba(255,255,255,.06);--text:#f5f5f7;
+  --fd:'Sora',system-ui,sans-serif;--fm:'JetBrains Mono',monospace;
+  --f:system-ui,-apple-system,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:#06070b;color:var(--text);font-family:var(--f);min-height:100%}
+.wrap{position:relative;overflow:hidden;min-height:100vh;padding:26px 18px 60px}
+/* fond dégradé premium de la page compte (identique à l'app) */
+.wrap::before{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(120% 80% at 50% -8%,rgba(39,211,255,.16),transparent 58%),
+    radial-gradient(90% 60% at 92% 6%,rgba(123,110,255,.14),transparent 60%),
+    linear-gradient(180deg,rgba(11,12,17,0) 40%,rgba(0,0,0,.35) 100%)}
+.note{position:relative;z-index:3;max-width:440px;margin:0 auto 14px;font-family:var(--fm);
+  font-size:12px;line-height:1.55;color:#bdd9e6;background:rgba(39,211,255,.08);
+  border:1px solid rgba(39,211,255,.35);border-radius:13px;padding:11px 13px;text-align:center}
+.note b{color:#eaf6ff}
+
+/* orbes flottants */
+.sg-orb{position:absolute;border-radius:50%;filter:blur(36px);opacity:.45;z-index:0;pointer-events:none;
+  will-change:transform;transform:translateZ(0);animation:sgfloat 9s ease-in-out infinite}
+.sg-orb.o1{width:170px;height:170px;background:radial-gradient(circle,rgba(39,211,255,.5),transparent 70%);top:120px;left:-34px}
+.sg-orb.o2{width:200px;height:200px;background:radial-gradient(circle,rgba(123,110,255,.42),transparent 70%);bottom:30px;right:-46px;animation-delay:-4.5s}
+@keyframes sgfloat{0%,100%{transform:translate3d(0,0,0)}50%{transform:translate3d(10px,-16px,0)}}
+
+/* en-tête */
+.sga-head{position:relative;z-index:2;text-align:center;margin:2px auto 18px;max-width:440px}
+.sgp-kicker{display:inline-block;font-family:var(--fm);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--cyan);margin-bottom:4px}
+.sga-head h1{margin:6px 0 8px;font-family:var(--fd);font-weight:900;font-size:30px;color:#fff}
+.sga-wave{display:inline-block;transform-origin:70% 80%;animation:sgaWave 2.6s ease-in-out infinite}
+@keyframes sgaWave{0%,62%,100%{transform:rotate(0)}68%{transform:rotate(16deg)}74%{transform:rotate(-12deg)}80%{transform:rotate(12deg)}86%{transform:rotate(-6deg)}92%{transform:rotate(0)}}
+.sga-sub{max-width:360px;margin:0 auto;color:var(--muted);font-size:13.5px;line-height:1.55}
+.sga-sub b{color:#dff4ff;font-weight:700}
+
+/* ====== CARTE AUTH — bordure aurora en ANNEAU MASQUÉ (le correctif) ====== */
+.sg-auth{position:relative;z-index:2;max-width:380px;margin:0 auto;overflow:hidden;isolation:isolate;
+  border:none;border-radius:18px;padding:18px;
+  background:linear-gradient(180deg,rgba(21,23,31,.99),rgba(11,12,17,1));
+  box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 40px rgba(39,211,255,.16)}
+.sg-auth>*{position:relative;z-index:2}
+@property --sgauth-ang{syntax:"<angle>";inherits:false;initial-value:0deg}
+.sg-auth::before{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;border-radius:18px;padding:1.6px;
+  background:conic-gradient(from var(--sgauth-ang),rgba(39,211,255,.18) 0 56%,rgba(255,255,255,.9) 72%,#9fe8ff 79%,rgba(39,211,255,.18) 90% 100%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+          mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;
+  will-change:--sgauth-ang;animation:sgauthspin 4.2s linear infinite}
+@keyframes sgauthspin{to{--sgauth-ang:360deg}}
+@supports not ((-webkit-mask-composite:xor) or (mask-composite:exclude)){
+  .sg-auth::before{display:none}
+  .sg-auth{border:1.5px solid rgba(39,211,255,.5)}
+}
+
+.sg-tabs{display:flex;gap:6px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:13px;padding:5px;margin:0 0 16px}
+.sg-tab{flex:1;border:none;background:transparent;color:var(--muted);font-family:var(--fd);font-weight:700;font-size:13px;padding:9px;border-radius:9px;cursor:pointer;transition:.2s}
+.sg-tab.active{background:rgba(39,211,255,.16);color:#fff}
+.sg-field{margin:0 0 12px}
+.sg-field label{display:block;font-size:12px;color:var(--muted);font-family:var(--fm);margin:0 0 5px}
+.sg-field input{width:100%;box-sizing:border-box;border-radius:12px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.04);color:#fff;font-size:14px;padding:12px 14px;outline:none;transition:border-color .2s}
+.sg-field input:focus{border-color:var(--cyan)}
+.sg-auth-msg{font-family:var(--fm);font-size:12.5px;line-height:1.45;font-weight:600;text-align:center;border-radius:11px;padding:11px 13px;margin:0 0 12px;
+  color:#ffd0d6;background:rgba(226,0,26,.14);border:1px solid rgba(226,0,26,.42)}
+.sg-bigbtn{width:100%;border:none;border-radius:13px;padding:14px;font-family:var(--fd);font-weight:800;font-size:15px;color:#fff;cursor:pointer;background:linear-gradient(90deg,#3a86ff,#2b6ee0);box-shadow:0 10px 26px rgba(43,110,224,.4);transition:transform .15s}
+.sg-bigbtn:active{transform:scale(.98)}
+.sg-divider{display:flex;align-items:center;gap:12px;margin:16px 0;color:var(--muted);font-size:11.5px;font-family:var(--fm)}
+.sg-divider::before,.sg-divider::after{content:"";flex:1;height:1px;background:rgba(255,255,255,.12)}
+.sg-google{display:flex;align-items:center;justify-content:center;gap:11px;width:100%;box-sizing:border-box;border-radius:13px;padding:13px;cursor:pointer;background:#fff;border:1px solid #fff;color:#1f1f1f;font-family:var(--fd);font-weight:700;font-size:14.5px}
+.sg-switch{display:block;width:100%;margin:15px 0 2px;padding:6px 2px;background:none;border:none;cursor:pointer;font-family:var(--fm);font-size:12px;color:rgba(255,255,255,.58);text-align:center}
+.sg-switch b{color:var(--cyan);font-weight:700}
+@media (prefers-reduced-motion:reduce){.sg-orb,.sg-auth::before,.sga-wave{animation:none!important}}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <span class="sg-orb o1"></span><span class="sg-orb o2"></span>
+    <p class="note">APERÇU DU CORRECTIF · Touchez le champ <b>Email</b> pour ouvrir/fermer le clavier&nbsp;:
+      la bordure animée doit rester un fin liseré — <b>plus aucun balayage chromé sur le formulaire</b>.</p>
+
+    <div class="sga-head">
+      <span class="sgp-kicker">Mon compte</span>
+      <h1>Bienvenue <span class="sga-wave">👋</span></h1>
+      <p class="sga-sub">Crée ton compte ou connecte-toi pour activer tes <b>favoris</b> et tes <b>alertes passage</b>.</p>
+    </div>
+
+    <div class="sg-auth">
+      <div class="sg-tabs">
+        <button class="sg-tab" type="button">Créer un compte</button>
+        <button class="sg-tab active" type="button">Se connecter</button>
+      </div>
+      <div class="sg-field"><label>Email</label><input type="email" placeholder="vous@exemple.fr" autocomplete="email"/></div>
+      <div class="sg-field"><label>Mot de passe</label><input type="password" placeholder="••••••••"/></div>
+      <div class="sg-auth-msg">Entre un email valide.</div>
+      <button class="sg-bigbtn" type="button">Se connecter</button>
+      <div class="sg-divider">ou</div>
+      <button class="sg-google" type="button">
+        <svg viewBox="0 0 48 48" width="19" height="19" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+        Continuer avec Google
+      </button>
+      <button class="sg-switch" type="button">Pas encore de compte ? <b>Créez-en un juste ici</b></button>
+    </div>
+  </div>
+</body>
+</html>
