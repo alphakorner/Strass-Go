@@ -1,0 +1,6 @@
+# Strass&Go — robots.txt
+# @ By Brice Jct · Alpha OS · Groupe Alpha Nex Strasbourg
+User-agent: *
+Allow: /
+
+Sitemap: https://alphakorner.github.io/Strass-Go/sitemap.xml
