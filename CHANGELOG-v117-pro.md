@@ -133,7 +133,14 @@ metal-button (simplifié en bouton sobre) · cutout-card · folded-card · logo-
 
 ---
 
-## 8. Vérification finale avant publication
+## 8. Correctifs : zoom et accès admin
+
+- **Zoom de page désactivé partout** (avant et après connexion) : `maximum-scale=1, user-scalable=no` dans la balise viewport, y compris quand l'app la réécrit pour les téléphones ; `touch-action: manipulation` contre le zoom au double-tap ; pincement bloqué sur iPhone. Les cartes (Leaflet, globe, vue 3D) gardent leur propre zoom.
+- **Accès admin rétabli** : la signature « By Brice Jct · Alpha OS · Strasbourg » en bas du menu ☰ s'ouvre de nouveau au double-tap (le double-tap faisait zoomer la page au lieu d'ouvrir l'admin). Détection du double-tap ajoutée en plus du double-clic d'origine, le menu se ferme pour que l'écran admin passe au premier plan.
+- **Même accès caché dans l'app** : la même signature en bas de Réglages (bouton profil en bas à gauche) ouvre l'admin au double-tap.
+- La connexion admin elle-même (code, console, Supabase) est inchangée.
+
+## 9. Vérification finale avant publication
 
 - 44 scripts : 0 erreur de syntaxe.
 - Parcours testés, mobile, clair et sombre, sans erreur de l'app : page publique (toutes les sections), écrans d'autorisation, accueil (bouton jour/nuit, sélecteur, raccourcis, grille, « En un coup d'œil », astuces), Carte de la ville (arrivée repliée, « Tous les services », lieux par service, fiche détaillée), patinoire, parkings, signalements (envoi + repli de type), caméras (1 154).
