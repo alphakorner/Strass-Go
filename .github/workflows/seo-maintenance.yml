@@ -1,0 +1,145 @@
+name: SEO maintenance
+
+on:
+  schedule:
+    - cron: "0 5 * * 1"   # chaque lundi 05:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  SITE: https://strassgo.fr
+  INDEXNOW_KEY: 358d6e0d870e131e3ff67b7ec26a5c21
+  GSC_SITE: sc-domain:strassgo.fr   # ou https://strassgo.fr/ si propriété "préfixe d'URL"
+
+jobs:
+  seo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Regénérer sitemap.xml (lastmod = dernier commit du fichier)
+        run: |
+          python - <<'PY'
+          import glob, os, subprocess
+          SITE = os.environ["SITE"]
+          skip = {"403.html","404.html","500.html","502.html","503.html","504.html"}
+          prio = {"index.html":"1.0","strassgo.html":"0.9","stationnement-strasbourg.html":"0.9","info-tram-bus-strasbourg.html":"0.9",
+                  "cameras-strasbourg.html":"0.8","voiture-strasbourg.html":"0.8","blog.html":"0.6","plan-du-site.html":"0.3"}
+          def lastmod(f):
+              d = subprocess.run(["git","log","-1","--format=%cs","--",f],capture_output=True,text=True).stdout.strip()
+              return d or subprocess.run(["date","+%F"],capture_output=True,text=True).stdout.strip()
+          files = sorted(f for f in glob.glob("*.html") if f not in skip and ".old." not in f)
+          out = ['<?xml version="1.0" encoding="UTF-8"?>',
+                 '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">']
+          for f in files:
+              loc = SITE + "/" if f == "index.html" else f"{SITE}/{f}"
+              cf = "weekly" if f in ("index.html","blog.html","stationnement-strasbourg.html","info-tram-bus-strasbourg.html") else "monthly"
+              out.append(f"  <url>\n    <loc>{loc}</loc>\n    <lastmod>{lastmod(f)}</lastmod>\n    <changefreq>{cf}</changefreq>\n    <priority>{prio.get(f,'0.7')}</priority>")
+              if f == "index.html":
+                  out.append(f"    <image:image><image:loc>{SITE}/og-preview.png</image:loc></image:image>")
+              out.append("  </url>")
+          out.append("</urlset>")
+          open("sitemap.xml","w",encoding="utf-8").write("\n".join(out)+"\n")
+          print(len(files), "URLs")
+          PY
+
+      - name: Vérifier les liens (internes bloquants, sitemap en ligne en avertissement)
+        run: |
+          python - <<'PY'
+          import glob, re, os, sys, urllib.request, urllib.error
+          SITE = os.environ["SITE"]
+          bad = []
+          skip = {"index.html","403.html","404.html","500.html","502.html","503.html","504.html"}
+          for f in [x for x in glob.glob("*.html") if x not in skip and ".old." not in x]:
+              h = open(f, encoding="utf-8").read()
+              for u in re.findall(r'(?:href|src)="([^"]+)"', h):
+                  if u.startswith(("mailto:","tel:","data:","javascript:","blob:","#")): continue
+                  if u.startswith(SITE): u = u[len(SITE):].lstrip("/") or "index.html"
+                  elif u.startswith(("http://","https://")): continue
+                  u = u.split("#")[0].split("?")[0].lstrip("/") or "index.html"
+                  if not os.path.exists(u): bad.append((f,u))
+          for f,u in bad: print(f"::error file={f}::lien cassé -> {u}")
+          urls = re.findall(r"<loc>([^<]+)</loc>", open("sitemap.xml",encoding="utf-8").read())
+          for u in urls:
+              try:
+                  r = urllib.request.urlopen(urllib.request.Request(u, headers={"User-Agent":"seo-check"}), timeout=20)
+                  if r.status != 200: print(f"::warning::{u} -> {r.status}")
+              except Exception as ex:
+                  print(f"::warning::{u} -> {ex}")
+          sys.exit(1 if bad else 0)
+          PY
+
+      - name: Commit du sitemap si modifié
+        run: |
+          git config user.name "seo-bot"
+          git config user.email "seo-bot@users.noreply.github.com"
+          if [ -n "$(git status --porcelain sitemap.xml)" ]; then
+            git add sitemap.xml
+            git commit -m "chore(seo): sitemap.xml regénéré"
+            git push
+          else
+            echo "sitemap inchangé"
+          fi
+
+      - name: Ping IndexNow (URLs modifiées dans les 8 derniers jours)
+        run: |
+          python - <<'PY'
+          import json, os, re, datetime, urllib.request
+          SITE, KEY = os.environ["SITE"], os.environ["INDEXNOW_KEY"]
+          limit = (datetime.date.today() - datetime.timedelta(days=8)).isoformat()
+          xml = open("sitemap.xml", encoding="utf-8").read()
+          urls = [m[0] for m in re.findall(r"<loc>([^<]+)</loc>\s*<lastmod>([^<]+)</lastmod>", xml) if m[1] >= limit]
+          if not urls:
+              print("aucune URL récente, pas de ping"); raise SystemExit
+          body = json.dumps({"host":"strassgo.fr","key":KEY,"keyLocation":f"{SITE}/{KEY}.txt","urlList":urls}).encode()
+          req = urllib.request.Request("https://api.indexnow.org/IndexNow", data=body, headers={"Content-Type":"application/json; charset=utf-8"})
+          try:
+              print("IndexNow ->", urllib.request.urlopen(req, timeout=30).status, len(urls), "URLs")
+          except Exception as ex:
+              print("::warning::IndexNow", ex)
+          PY
+
+      - name: Classement Search Console (si secret GSC_SA_JSON défini)
+        env:
+          GSC_SA_JSON: ${{ secrets.GSC_SA_JSON }}
+        run: |
+          if [ -z "$GSC_SA_JSON" ]; then echo "GSC_SA_JSON absent, étape ignorée"; exit 0; fi
+          pip install -q google-auth requests
+          python - <<'PY'
+          import json, os, datetime, requests, urllib.parse
+          from google.oauth2 import service_account
+          from google.auth.transport.requests import Request
+          creds = service_account.Credentials.from_service_account_info(json.loads(os.environ["GSC_SA_JSON"]), scopes=["https://www.googleapis.com/auth/webmasters.readonly"])
+          creds.refresh(Request())
+          end = datetime.date.today() - datetime.timedelta(days=3)
+          start = end - datetime.timedelta(days=28)
+          site = urllib.parse.quote(os.environ["GSC_SITE"], safe="")
+          r = requests.post(f"https://www.googleapis.com/webmasters/v3/sites/{site}/searchAnalytics/query",
+              headers={"Authorization": f"Bearer {creds.token}"},
+              json={"startDate":start.isoformat(),"endDate":end.isoformat(),"dimensions":["query"],"rowLimit":200}, timeout=60)
+          r.raise_for_status()
+          rows = r.json().get("rows", [])
+          json.dump(rows, open("gsc-report.json","w",encoding="utf-8"), ensure_ascii=False, indent=1)
+          cibles = ["strasgo","strassgo","strass go","stras go","stationnement strasbourg","info tram","info bus","horaire tram","parking strasbourg","trafic strasbourg","webcam strasbourg","vélhop","carburant"]
+          md = ["| Requête | Position | Clics | Impr. |","|---|---|---|---|"]
+          for x in sorted(rows, key=lambda x: x["position"]):
+              q = x["keys"][0]
+              if any(c in q.lower() for c in cibles):
+                  md.append(f"| {q} | {x['position']:.1f} | {x['clicks']} | {x['impressions']} |")
+          open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8").write("## Search Console (28 j)\n"+"\n".join(md)+"\n")
+          PY
+
+      - name: Archiver le rapport GSC (privé, hors dépôt)
+        uses: actions/upload-artifact@v4
+        if: ${{ hashFiles('gsc-report.json') != '' }}
+        with:
+          name: gsc-report
+          path: gsc-report.json
