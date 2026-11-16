@@ -1,0 +1,5 @@
+# Strass Go — https://strassgo.fr
+User-agent: *
+Allow: /
+
+Sitemap: https://strassgo.fr/sitemap.xml

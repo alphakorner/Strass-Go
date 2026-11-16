@@ -1,5 +1,159 @@
 # Strass Go — https://strassgo.fr
+# Guide pour les assistants IA : https://strassgo.fr/llms.txt
+# Les groupes spécifiques ignorent le groupe *, donc la règle .old. est répétée dans chacun.
+
 User-agent: *
 Allow: /
+Disallow: /*.old.*
+
+# --- Moteurs de recherche ---
+User-agent: Googlebot
+Allow: /
+Disallow: /*.old.*
+
+User-agent: Googlebot-Image
+Allow: /
+Disallow: /*.old.*
+
+User-agent: Bingbot
+Allow: /
+Disallow: /*.old.*
+
+User-agent: DuckDuckBot
+Allow: /
+Disallow: /*.old.*
+
+User-agent: Slurp
+Allow: /
+Disallow: /*.old.*
+
+User-agent: YandexBot
+Allow: /
+Disallow: /*.old.*
+
+User-agent: YandexImages
+Allow: /
+Disallow: /*.old.*
+
+User-agent: Baiduspider
+Allow: /
+Disallow: /*.old.*
+
+User-agent: Yeti
+Allow: /
+Disallow: /*.old.*
+
+User-agent: SeznamBot
+Allow: /
+Disallow: /*.old.*
+
+User-agent: Qwantify
+Allow: /
+Disallow: /*.old.*
+
+User-agent: Applebot
+Allow: /
+Disallow: /*.old.*
+
+User-agent: Applebot-Extended
+Allow: /
+Disallow: /*.old.*
+
+User-agent: Bravebot
+Allow: /
+Disallow: /*.old.*
+
+User-agent: Ecosia
+Allow: /
+Disallow: /*.old.*
+
+User-agent: MojeekBot
+Allow: /
+Disallow: /*.old.*
+
+User-agent: PetalBot
+Allow: /
+Disallow: /*.old.*
+
+User-agent: facebookexternalhit
+Allow: /
+Disallow: /*.old.*
+
+User-agent: Twitterbot
+Allow: /
+Disallow: /*.old.*
+
+User-agent: LinkedInBot
+Allow: /
+Disallow: /*.old.*
+
+User-agent: Pinterestbot
+Allow: /
+Disallow: /*.old.*
+
+# --- Assistants et moteurs IA ---
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /*.old.*
+
+User-agent: GPTBot
+Allow: /
+Disallow: /*.old.*
+
+User-agent: ChatGPT-User
+Allow: /
+Disallow: /*.old.*
+
+User-agent: Google-Extended
+Allow: /
+Disallow: /*.old.*
+
+User-agent: ClaudeBot
+Allow: /
+Disallow: /*.old.*
+
+User-agent: Claude-SearchBot
+Allow: /
+Disallow: /*.old.*
+
+User-agent: Claude-User
+Allow: /
+Disallow: /*.old.*
+
+User-agent: anthropic-ai
+Allow: /
+Disallow: /*.old.*
+
+User-agent: PerplexityBot
+Allow: /
+Disallow: /*.old.*
+
+User-agent: Perplexity-User
+Allow: /
+Disallow: /*.old.*
+
+User-agent: Meta-ExternalAgent
+Allow: /
+Disallow: /*.old.*
+
+User-agent: MistralAI-User
+Allow: /
+Disallow: /*.old.*
+
+User-agent: CCBot
+Allow: /
+Disallow: /*.old.*
+
+User-agent: Amazonbot
+Allow: /
+Disallow: /*.old.*
+
+User-agent: cohere-ai
+Allow: /
+Disallow: /*.old.*
+
+User-agent: YouBot
+Allow: /
+Disallow: /*.old.*
 
 Sitemap: https://strassgo.fr/sitemap.xml
