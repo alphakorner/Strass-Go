@@ -1,23 +1,23 @@
 {
   "name": "Strass Go — Strasbourg en direct",
   "short_name": "Strass Go",
-  "id": "https://alphakorner.github.io/Strass-Go/",
+  "id": "https://strassgo.fr/",
   "description": "Bus & trams CTS de Strasbourg géolocalisés en temps réel : carte live, prochains passages, alertes, parkings-relais, trafic, météo et qualité de l'air. Gratuit, sans pub.",
   "lang": "fr",
   "dir": "ltr",
-  "start_url": "https://alphakorner.github.io/Strass-Go/index.html",
-  "scope": "https://alphakorner.github.io/Strass-Go/",
+  "start_url": "https://strassgo.fr/index.html",
+  "scope": "https://strassgo.fr/",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait",
   "background_color": "#000000",
   "theme_color": "#000000",
   "icons": [
-    { "src": "https://alphakorner.github.io/Strass-Go/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "https://alphakorner.github.io/Strass-Go/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "https://alphakorner.github.io/Strass-Go/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
-    { "src": "https://alphakorner.github.io/Strass-Go/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "https://strassgo.fr/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "https://strassgo.fr/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "https://strassgo.fr/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "https://strassgo.fr/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
-  "screenshots": [{ "src": "https://alphakorner.github.io/Strass-Go/og-preview.png", "sizes": "1280x640", "type": "image/png", "form_factor": "wide", "label": "Carte live CTS Strasbourg" }],
+  "screenshots": [{ "src": "https://strassgo.fr/og-preview.png", "sizes": "1280x640", "type": "image/png", "form_factor": "wide", "label": "Carte live CTS Strasbourg" }],
   "prefer_related_applications": false
 }
