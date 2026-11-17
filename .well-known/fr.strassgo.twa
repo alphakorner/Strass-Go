@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "fr.strassgo.twa",
+    "sha256_cert_fingerprints": ["EC:E0:F0:F8:54:0F:00:16:66:9C:62:DD:2A:21:E7:91:31:B2:03:C7:65:CA:66:5B:37:26:38:4B:16:BD:96:9C"]
+  }
+}]
